@@ -1,5 +1,9 @@
 package com.vigia.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.vigia.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -73,7 +77,12 @@ private fun Fila(etiqueta: String, valor: String, colorValor: Color = Color.Unsp
 fun StudentScreen(
     ctx: ContextSnapshot,
     decision: AdaptationDecision,
-    samplingLabel: String
+    samplingLabel: String,
+    idAlumno: Int,
+    emitiendo: Boolean,
+    sala: Int,
+    nombre: String,
+    onSalir: () -> Unit
 ) {
     val color = when (decision.mode) {
         OperatingMode.NORMAL -> Color(0xFF2E7D32)
@@ -90,17 +99,39 @@ fun StudentScreen(
 
         // ----- Franja de contexto: por que esta corriendo esta app -----
         Row(
-            Modifier.fillMaxWidth().background(Color(0xFF1A1C1E))
+            Modifier.fillMaxWidth().background(Paleta.Guinda)
                 .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 10.dp),
+                .padding(horizontal = 20.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                "EXAMEN EN CURSO", color = Color.White,
-                fontSize = 13.sp, fontWeight = FontWeight.Bold
-            )
-            Text("supervision activa", color = Color(0xFFB0B4B8), fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    painter = painterResource(R.drawable.escudo_uni),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(26.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(
+                        "VIGÍA UNI", color = Color.White,
+                        fontSize = 13.sp, fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "examen en curso", color = Paleta.SobreGuinda, fontSize = 11.sp
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "$nombre · aula $sala",
+                    color = Paleta.SobreGuinda, fontSize = 12.sp
+                )
+                TextButton(onClick = onSalir) {
+                    Text("Salir", color = Color(0xCCE8D5DA), fontSize = 12.sp)
+                }
+            }
         }
 
         // ----- Bloque de modo: grande, a color, visible desde lejos -----
@@ -177,6 +208,8 @@ fun StudentScreen(
             Fila("WiFi", onOff(ctx.wifiEnabled), colorOnOff(ctx.wifiEnabled))
             Fila("Datos moviles", onOff(ctx.mobileDataEnabled), colorOnOff(ctx.mobileDataEnabled))
             Fila("Pantalla", if (ctx.screenOn) "encendida" else "apagada")
+            Fila("Este equipo", if (nombre.isNotBlank()) nombre else "sin nombre · $idAlumno")
+            Fila("Transmision al docente", onOff(emitiendo), colorOnOff(emitiendo))
 
             Spacer(Modifier.height(18.dp))
 

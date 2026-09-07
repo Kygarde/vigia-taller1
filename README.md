@@ -123,6 +123,44 @@ Minimizar la app (sin cerrarla), esperar dos minutos y volver: el modo y los
 valores siguieron actualizándose. Es el `MonitoringService`, un servicio en
 primer plano; sin él Android suspende la app y el sensado se detiene.
 
+### Panel del docente
+
+La misma app trae las dos vistas. El botón **Panel docente**, arriba a la derecha,
+cambia entre ellas: se instala el mismo APK en los dos equipos, uno se queda como
+alumno y el otro entra al panel.
+
+1. Bluetooth encendido en ambos equipos y permisos concedidos
+2. Los dos deben tener el **mismo código de aula** (el chip `AULA nnn` de la barra superior)
+3. El equipo del alumno queda en su pantalla; el otro entra a **Panel docente**
+4. El panel lista los equipos que están transmitiendo, ordenados por nivel de riesgo
+
+No hay emparejamiento ni conexión. El equipo del alumno **anuncia** su estado y el
+del docente **escucha**: es advertising BLE, sin conexión. Android admite alrededor
+de siete conexiones GATT simultáneas, así que conectarse a cada alumno no escalaría
+a un salón completo; el advertising sí.
+
+El intervalo de emisión lo fija el modo activo, igual que la frecuencia del sensor:
+
+| Modo | Anuncia cada |
+|---|---|
+| `NORMAL` | 1 s |
+| `INTENSIVO` | 200 ms |
+| `AHORRO` | 5 s |
+
+Un equipo que deja de anunciar desaparece de la lista a los 15 segundos.
+
+### Código de aula
+
+Cada anuncio lleva un código de aula y el panel descarta los que no coinciden. Es
+lo que evita que dos salones vecinos usando la app se mezclen en la misma lista.
+
+Se cambia tocando el chip `AULA nnn` de la barra superior, y queda guardado en el
+equipo. El valor por defecto es **101**.
+
+> Es un separador operativo, no un control de seguridad: un alumno con acceso al
+> código podría cambiarlo. En un despliegue real lo emitiría la app del docente al
+> iniciar la sesión de examen.
+
 ### Ajustar los umbrales
 
 Todos los valores viven en un solo archivo:
@@ -146,18 +184,23 @@ Todos los valores viven en un solo archivo:
 | `FOREGROUND_SERVICE` · `FOREGROUND_SERVICE_DATA_SYNC` | Mantener el sensado con la app minimizada | Automático |
 | `POST_NOTIFICATIONS` | Notificación del servicio de monitoreo | Al abrir la app |
 | `ACCESS_NETWORK_STATE` | Detectar wifi y datos móviles | Automático |
-| `BLUETOOTH_ADVERTISE` · `BLUETOOTH_SCAN` · `BLUETOOTH_CONNECT` · `ACCESS_FINE_LOCATION` | Reservados para la transmisión BLE al docente | **No se solicitan** |
+| `BLUETOOTH_ADVERTISE` · `BLUETOOTH_SCAN` · `BLUETOOTH_CONNECT` | Anunciar el estado al panel del docente y escucharlo | Al abrir la app |
+| `ACCESS_FINE_LOCATION` | Solo en Android 11 o anterior, que exigía ubicación para escanear BLE | Solo en esos equipos |
 
-Los cuatro últimos están declarados en el manifiesto porque la arquitectura
-contempla el transporte BLE, pero **la app no los pide en tiempo de ejecución**:
-en esta versión no transmite nada, y solicitar permisos que no se usan
-contradice el principio de mínimo privilegio.
+En Android 12 en adelante el permiso de escaneo lleva la bandera
+`neverForLocation`: la app declara explícitamente que no usa el Bluetooth para
+deducir dónde está el alumno.
 
 ### Privacidad
 
 VIGÍA no captura pantalla, audio, ubicación GPS ni contenido de aplicaciones.
 Procesa únicamente metadatos derivados de sensores del propio dispositivo, y
 muestra en todo momento su modo de operación y el motivo de cada cambio.
+
+Lo único que sale del equipo son 9 bytes por anuncio: un identificador derivado
+del dispositivo (no de la persona), el código de aula, el nivel de riesgo, el
+índice de movimiento, la batería, el modo y tres banderas de conectividad. La
+pantalla del alumno indica en todo momento si está transmitiendo o no.
 
 ---
 
@@ -176,9 +219,11 @@ CONTEXTO          PROCESAMIENTO     DECISIÓN          ADAPTACIÓN
 | Decisión | `decision/AdaptationEngine.kt`, `decision/AdaptationRules.kt`, `decision/RiskEvaluator.kt` |
 | Adaptación | `adaptation/SamplingPolicy.kt`, `ui/StudentScreen.kt` |
 | Modelo de datos | `model/Model.kt` |
+| Transporte | `transport/PacketCodec.kt`, `transport/BleAdvertiser.kt`, `transport/BleScanner.kt` |
+| Panel del docente | `ui/TeacherScreen.kt` |
 | Robustez | `MonitoringService.kt` |
 
-**Tecnologías:** Kotlin · Jetpack Compose · Coroutines/Flow · SensorManager
+**Tecnologías:** Kotlin · Jetpack Compose · Coroutines/Flow · SensorManager · BLE Advertising
 
 ---
 
