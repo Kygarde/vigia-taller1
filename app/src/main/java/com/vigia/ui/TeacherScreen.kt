@@ -23,7 +23,10 @@ import androidx.compose.ui.unit.sp
 import com.vigia.R
 import com.vigia.model.OperatingMode
 import com.vigia.model.RiskLevel
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import com.vigia.transport.AlumnoVigilado
+import com.vigia.transport.EstadoAnuncio
 
 private fun colorRiesgo(riesgo: RiskLevel): Color = when (riesgo) {
     RiskLevel.NORMAL -> Paleta.Normal
@@ -108,8 +111,10 @@ private fun FilaAlumno(a: AlumnoVigilado) {
 fun TeacherScreen(
     alumnos: List<AlumnoVigilado>,
     bluetoothListo: Boolean,
+    permisosOk: Boolean,
+    estadoAnuncio: EstadoAnuncio,
     sala: Int,
-    aulaAnunciada: Boolean,
+    onPedirPermisos: () -> Unit,
     onVolver: () -> Unit
 ) {
     val enAlerta = alumnos.count { it.estado.risk == RiskLevel.ALERTA }
@@ -182,14 +187,19 @@ fun TeacherScreen(
 
         Column(Modifier.weight(1f).padding(horizontal = 22.dp, vertical = 14.dp)) {
             when {
+                !permisosOk -> Mensaje(
+                    "Falta el permiso de Bluetooth",
+                    "Sin él la app no puede anunciar el aula ni escuchar a los alumnos.",
+                    accion = "Conceder permiso", onAccion = onPedirPermisos
+                )
                 !bluetoothListo -> Mensaje(
                     "Bluetooth apagado",
                     "Enciende el Bluetooth para anunciar el aula y recibir a los alumnos."
                 )
-                !aulaAnunciada -> Mensaje(
+                estadoAnuncio !is EstadoAnuncio.Anunciando -> Mensaje(
                     "El aula no se está anunciando",
-                    "Sin la señal del aula los alumnos no pueden unirse. Sal y vuelve a " +
-                        "abrir el panel, y concede el permiso de Bluetooth si te lo pide."
+                    "Motivo: ${estadoAnuncio.mensaje}. Sin la señal del aula los alumnos " +
+                        "no pueden unirse."
                 )
                 alumnos.isEmpty() -> Mensaje(
                     "Aula $sala abierta",
@@ -207,7 +217,12 @@ fun TeacherScreen(
 }
 
 @Composable
-private fun Mensaje(titulo: String, detalle: String) {
+private fun Mensaje(
+    titulo: String,
+    detalle: String,
+    accion: String? = null,
+    onAccion: (() -> Unit)? = null
+) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
             .background(Paleta.PlomoFondo).padding(18.dp)
@@ -215,5 +230,14 @@ private fun Mensaje(titulo: String, detalle: String) {
         Text(titulo, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Paleta.Tinta)
         Spacer(Modifier.height(6.dp))
         Text(detalle, fontSize = 13.sp, color = Paleta.Plomo)
+        if (accion != null && onAccion != null) {
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onAccion,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Paleta.Guinda, contentColor = Paleta.Blanco
+                )
+            ) { Text(accion) }
+        }
     }
 }

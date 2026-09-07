@@ -105,6 +105,8 @@ fun HomeScreen(
     salaGuardada: Int,
     aulasAbiertas: Set<Int>,
     bluetoothListo: Boolean,
+    permisosOk: Boolean,
+    onPedirPermisos: () -> Unit,
     onEntrarComoAlumno: (String, Int) -> Unit,
     onEntrarComoDocente: (Int) -> Unit
 ) {
@@ -170,6 +172,7 @@ fun HomeScreen(
                 Spacer(Modifier.height(10.dp))
                 Aviso(
                     when {
+                        !permisosOk -> "Falta conceder el permiso de Bluetooth"
                         !bluetoothListo -> "Enciende el Bluetooth"
                         !salaValida -> "Escribe el código que dictó el docente"
                         aulaExiste -> "Aula $valorSala disponible"
@@ -178,6 +181,12 @@ fun HomeScreen(
                     },
                     ok = aulaExiste
                 )
+
+                if (!permisosOk) {
+                    TextButton(onClick = onPedirPermisos) {
+                        Text("Conceder permiso", fontSize = 14.sp, color = Paleta.Guinda)
+                    }
+                }
 
                 Spacer(Modifier.height(18.dp))
                 BotonPrincipal("Unirme", aulaExiste && nombre.isNotBlank()) {
@@ -191,9 +200,18 @@ fun HomeScreen(
                     "Código de aula", numerico = true,
                     error = sala.isNotEmpty() && !salaValida
                 )
-                if (!bluetoothListo) {
+                if (!permisosOk || !bluetoothListo) {
                     Spacer(Modifier.height(10.dp))
-                    Aviso("Enciende el Bluetooth", ok = false)
+                    Aviso(
+                        if (!permisosOk) "Falta conceder el permiso de Bluetooth"
+                        else "Enciende el Bluetooth",
+                        ok = false
+                    )
+                    if (!permisosOk) {
+                        TextButton(onClick = onPedirPermisos) {
+                            Text("Conceder permiso", fontSize = 14.sp, color = Paleta.Guinda)
+                        }
+                    }
                 }
                 Spacer(Modifier.height(24.dp))
                 BotonPrincipal("Abrir panel", salaValida) {

@@ -9,6 +9,7 @@ import com.vigia.decision.AdaptationEngine
 import com.vigia.model.*
 import com.vigia.processing.ContextManager
 import com.vigia.transport.BleAdvertiser
+import com.vigia.transport.EstadoAnuncio
 import com.vigia.transport.PacketCodec
 import com.vigia.transport.EquipoStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -76,9 +77,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _pantalla.value = Pantalla.ALUMNO
     }
 
-    /** true si la baliza del aula esta saliendo al aire. */
-    private val _aulaAnunciada = MutableStateFlow(false)
-    val aulaAnunciada = _aulaAnunciada.asStateFlow()
+    /** Estado real del anuncio, reportado por el propio Bluetooth. */
+    val estadoAnuncio = advertiser.estado
 
     /**
      * El docente abre su panel. No anuncia estado, pero si emite la baliza del aula:
@@ -89,8 +89,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         EquipoStore.guardarSala(app, sala)
         _sala.value = EquipoStore.leerSala(app)
         dejarDeAnunciar()
-        _aulaAnunciada.value =
-            runCatching { advertiser.publish(PacketCodec.encodeAula(sala)) }.isSuccess
+        advertiser.publish(PacketCodec.encodeAula(sala))
         _pantalla.value = Pantalla.DOCENTE
     }
 
@@ -104,8 +103,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _unido.value = false
         ultimoPaquete = null
         _emitiendo.value = false
-        _aulaAnunciada.value = false
         runCatching { advertiser.stop() }
+    }
+
+    /** Reintenta el anuncio del aula: se usa al volver de conceder permisos. */
+    fun reanunciarAula() {
+        if (_pantalla.value == Pantalla.DOCENTE &&
+            advertiser.estado.value !is EstadoAnuncio.Anunciando
+        ) {
+            advertiser.publish(PacketCodec.encodeAula(_sala.value))
+        }
     }
 
     private var ultimaEmision = 0L
@@ -144,12 +151,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         ultimaEmision = ahora
         ultimoPaquete = paquete
 
-        // Sin permiso de Bluetooth o con el Bluetooth apagado esto lanza excepcion:
-        // la app debe seguir funcionando igual, solo sin transmitir.
         // Deliberadamente NO se toca engine.linkAvailable aqui: el modo DESCONECTADO
         // tiene prioridad sobre todos los demas, asi que un fallo puntual del anuncio
         // dejaria la app clavada en DESCONECTADO y ocultaria A1 y A2 por completo.
-        _emitiendo.value = runCatching { advertiser.publish(paquete) }.isSuccess
+        advertiser.publish(paquete)
+        _emitiendo.value = advertiser.estado.value !is EstadoAnuncio.Detenido
     }
 
     override fun onCleared() {
