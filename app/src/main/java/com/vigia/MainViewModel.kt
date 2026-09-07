@@ -35,7 +35,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _decision.value = d
                 samplingPolicy.apply(d.mode)          // ADAPTACIÓN
                 _samplingLabel.value = samplingPolicy.currentConfig.label
-                android.util.Log.d("VIGIA", "${d.mode} | ${d.reason}")
             }
         }
     }
