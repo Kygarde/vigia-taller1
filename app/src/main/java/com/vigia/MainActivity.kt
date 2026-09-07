@@ -1,6 +1,7 @@
 package com.vigia
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -9,7 +10,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.core.content.ContextCompat
 import com.vigia.transport.BleScanner
 import com.vigia.ui.HomeScreen
 import com.vigia.ui.StudentScreen
@@ -20,7 +23,17 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val scanner by lazy { BleScanner(this) }
 
-    private val permissions = buildList {
+    /**
+     * Contador que fuerza a rehacer los flujos de Bluetooth.
+     *
+     * Hace falta porque el escaneo puede arrancar antes de que el usuario conceda
+     * los permisos: en ese caso startScan lanza SecurityException, el flujo queda
+     * vivo pero sin escuchar nada, y no se recupera solo. Al conceder los permisos
+     * o al volver a la app subimos este contador y los flujos se crean de nuevo.
+     */
+    private val cicloBluetooth = mutableIntStateOf(0)
+
+    private val permisosNecesarios = buildList {
         if (android.os.Build.VERSION.SDK_INT >= 33)
             add(android.Manifest.permission.POST_NOTIFICATIONS)
 
@@ -35,41 +48,61 @@ class MainActivity : ComponentActivity() {
         }
     }.toTypedArray()
 
+    /** Los que de verdad hacen falta para el Bluetooth (las notificaciones no cuentan). */
+    private val permisosBle = permisosNecesarios
+        .filter { it != android.Manifest.permission.POST_NOTIFICATIONS }
+
+    private fun permisosBleConcedidos(): Boolean = permisosBle.all {
+        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    // Registrado como campo: debe crearse antes de que la Activity arranque.
+    private val pedirPermisos =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            // Con los permisos ya resueltos, rehacer escaneo y anuncio.
+            cicloBluetooth.intValue++
+            viewModel.reanunciarAula()
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Solo la primera vez: al girar el equipo Android vuelve a entrar aqui y no
-        // hace falta volver a pedir permisos ni relanzar el servicio.
+        // Solo la primera vez: al girar el equipo Android vuelve a entrar aqui.
         if (savedInstanceState == null) {
-            if (permissions.isNotEmpty()) {
-                registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
-                    .launch(permissions)
-            }
+            if (!permisosBleConcedidos()) pedirPermisos.launch(permisosNecesarios)
             // Mantiene el sensado vivo aunque el usuario minimice la app.
             startForegroundService(Intent(this, MonitoringService::class.java))
         }
 
         setContent {
-            // La pantalla activa vive en el ViewModel: sobrevive a la rotacion.
+            // Leer el contador suscribe esta composicion a sus cambios.
+            val ciclo = cicloBluetooth.intValue
+            val permisosOk = remember(ciclo) { permisosBleConcedidos() }
+            val btListo = remember(ciclo) { scanner.bluetoothListo }
+
             val pantalla by viewModel.pantalla.collectAsState()
             val sala by viewModel.sala.collectAsState()
             val nombre by viewModel.nombre.collectAsState()
 
-            // El boton atras del sistema devuelve al inicio en vez de cerrar la app.
             BackHandler(enabled = pantalla != Pantalla.INICIO) { viewModel.salir() }
 
             when (pantalla) {
 
                 Pantalla.INICIO -> {
-                    // Escucha las balizas de aula solo mientras estamos en el inicio.
-                    val aulas by remember { scanner.aulasAbiertas() }
-                        .collectAsState(initial = emptySet())
+                    // Escucha las balizas de aula solo mientras estamos en el inicio,
+                    // y solo si ya hay permisos: si no, el flujo naceria sordo.
+                    val aulas by remember(ciclo, permisosOk) {
+                        if (permisosOk) scanner.aulasAbiertas()
+                        else kotlinx.coroutines.flow.flowOf(emptySet())
+                    }.collectAsState(initial = emptySet())
 
                     HomeScreen(
                         nombreGuardado = nombre,
                         salaGuardada = sala,
                         aulasAbiertas = aulas,
-                        bluetoothListo = scanner.bluetoothListo,
+                        bluetoothListo = btListo,
+                        permisosOk = permisosOk,
+                        onPedirPermisos = { pedirPermisos.launch(permisosNecesarios) },
                         onEntrarComoAlumno = viewModel::unirseComoAlumno,
                         onEntrarComoDocente = viewModel::abrirPanelDocente
                     )
@@ -94,22 +127,31 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Pantalla.DOCENTE -> {
-                    // El escaneo arranca al entrar aqui y se detiene solo al salir:
-                    // el Flow se cancela cuando esta pantalla deja de estar en composicion.
-                    val alumnos by remember(sala) { scanner.alumnos(sala) }
-                        .collectAsState(initial = emptyList())
+                    val alumnos by remember(ciclo, permisosOk, sala) {
+                        if (permisosOk) scanner.alumnos(sala)
+                        else kotlinx.coroutines.flow.flowOf(emptyList())
+                    }.collectAsState(initial = emptyList())
 
-                    val aulaAnunciada by viewModel.aulaAnunciada.collectAsState()
+                    val estadoAnuncio by viewModel.estadoAnuncio.collectAsState()
 
                     TeacherScreen(
                         alumnos = alumnos,
-                        bluetoothListo = scanner.bluetoothListo,
+                        bluetoothListo = btListo,
+                        permisosOk = permisosOk,
+                        estadoAnuncio = estadoAnuncio,
                         sala = sala,
-                        aulaAnunciada = aulaAnunciada,
+                        onPedirPermisos = { pedirPermisos.launch(permisosNecesarios) },
                         onVolver = viewModel::salir
                     )
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // El usuario pudo conceder permisos o encender el Bluetooth desde Ajustes.
+        cicloBluetooth.intValue++
+        viewModel.reanunciarAula()
     }
 }
