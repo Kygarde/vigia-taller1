@@ -1,5 +1,6 @@
 package com.vigia
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -29,6 +30,10 @@ class MainActivity : ComponentActivity() {
 
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
             .launch(permissions)
+
+        // Arranca el servicio en primer plano: mantiene el sensado
+        // vivo aunque el usuario minimice la app.
+        startForegroundService(Intent(this, MonitoringService::class.java))
 
         setContent {
             val snapshot by viewModel.snapshot.collectAsState()
