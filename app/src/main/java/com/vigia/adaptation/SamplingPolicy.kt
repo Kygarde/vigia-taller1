@@ -29,7 +29,7 @@ class SamplingPolicy(private val accelerometer: AccelerometerProvider) {
         OperatingMode.INTENSIVO -> SamplingConfig(
             SensorManager.SENSOR_DELAY_GAME, 200L, true, "5 Hz")
         OperatingMode.AHORRO -> SamplingConfig(
-            SensorManager.SENSOR_DELAY_UI, 5_000L, false, "0.2 Hz")
+            SensorManager.SENSOR_DELAY_NORMAL, 5_000L, false, "0.2 Hz")
         OperatingMode.DESCONECTADO -> SamplingConfig(
             SensorManager.SENSOR_DELAY_NORMAL, 1_000L, true, "1 Hz (buffer)")
     }
