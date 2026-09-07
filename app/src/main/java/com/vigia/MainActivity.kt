@@ -3,45 +3,43 @@ package com.vigia
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.vigia.ui.theme.MyApplicationTheme
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.vigia.ui.StudentScreen
 
 class MainActivity : ComponentActivity() {
+
+    private val viewModel: MainViewModel by viewModels()
+
+    private val permissions = buildList {
+        if (android.os.Build.VERSION.SDK_INT >= 33)
+            add(android.Manifest.permission.POST_NOTIFICATIONS)
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+            add(android.Manifest.permission.BLUETOOTH_SCAN)
+            add(android.Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+    }.toTypedArray()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
+            .launch(permissions)
+
         setContent {
-            MyApplicationTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
-            }
+            val snapshot by viewModel.snapshot.collectAsState()
+            val decision by viewModel.decision.collectAsState()
+            val samplingLabel by viewModel.samplingLabel.collectAsState()
+
+            StudentScreen(
+                ctx = snapshot,
+                decision = decision,
+                samplingLabel = samplingLabel
+            )
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    MyApplicationTheme {
-        Greeting("Android")
     }
 }

@@ -1,11 +1,26 @@
 package com.vigia.decision
 
+import com.vigia.model.ContextSnapshot
+import com.vigia.model.RiskLevel
+
 class RiskEvaluator {
-    fun evaluateRisk(processedValue: Double): String {
-        return when {
-            processedValue > 80.0 -> "HIGH"
-            processedValue > 50.0 -> "MEDIUM"
-            else -> "LOW"
+
+    private var aboveSince: Long? = null
+
+    fun evaluate(ctx: ContextSnapshot): RiskLevel {
+        val now = ctx.timestamp
+
+        if (ctx.movementIndex > AdaptationRules.MOVEMENT_ALERTA) {
+            if (aboveSince == null) aboveSince = now
+            val sustained = now - (aboveSince ?: now)
+            if (sustained >= AdaptationRules.SUSTAINED_MS && ctx.screenOn) {
+                return RiskLevel.ALERTA
+            }
+        } else {
+            aboveSince = null
         }
+
+        return if (ctx.movementIndex > AdaptationRules.MOVEMENT_ATENCION)
+            RiskLevel.ATENCION else RiskLevel.NORMAL
     }
 }
