@@ -16,7 +16,17 @@ un modo de operación, y cambia la frecuencia con la que muestrea sus sensores.
 
 | Modo NORMAL | Modo INTENSIVO | Modo AHORRO |
 |---|---|---|
-| _(pendiente)_ | _(pendiente)_ | _(pendiente)_ |
+| ![Modo NORMAL](docs/img/modo-normal.png) | ![Modo INTENSIVO](docs/img/modo-intensivo.png) | ![Modo AHORRO](docs/img/modo-ahorro.png) |
+| Equipo en reposo, 1 Hz | Movimiento sostenido, 5 Hz | Ahorro de bateria, 0.2 Hz |
+
+### El tiempo sostenido en accion
+
+<img src="docs/img/riesgo-atencion.png" width="320">
+
+El indice de movimiento ya cruzo el umbral de alerta (0.413 sobre 0.25), pero el
+riesgo sigue en `ATENCION` y el modo en `NORMAL`: el movimiento todavia no lleva
+`SUSTAINED_MS` sostenido. El sistema distingue un golpe puntual de una
+manipulacion real.
 
 ---
 
@@ -76,9 +86,9 @@ adaptaciones sin ayuda del equipo.
 ### A1 — Modo INTENSIVO
 
 1. Abrir la app y dejar el celular quieto sobre la mesa unos 10 segundos.
-   Debe mostrar modo **`NORMAL`**, movimiento por debajo de 0.05 y frecuencia
+   Debe mostrar modo **`NORMAL`**, movimiento por debajo de 0.10 y frecuencia
    **1 Hz**.
-2. **Agitar el celular durante unos 4 segundos**, con la pantalla encendida.
+2. **Agitar el celular durante unos 3 segundos**, con la pantalla encendida.
 3. El riesgo pasa a `ALERTA` y el modo cambia solo a **`INTENSIVO`**.
    La frecuencia sube a **5 Hz** y el motivo en pantalla dice
    *"Movimiento sostenido: aumentando frecuencia"*.
