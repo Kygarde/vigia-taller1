@@ -17,19 +17,26 @@ class MainActivity : ComponentActivity() {
     private val permissions = buildList {
         if (android.os.Build.VERSION.SDK_INT >= 33)
             add(android.Manifest.permission.POST_NOTIFICATIONS)
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
-            add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
-            add(android.Manifest.permission.BLUETOOTH_SCAN)
-            add(android.Manifest.permission.BLUETOOTH_CONNECT)
-        }
-        add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+
+        // --- Reservado para la transmision BLE al docente (siguiente iteracion) ---
+        // La app no transmite ni usa ubicacion, asi que no se piden estos permisos.
+        // Quedan declarados en el manifiesto y listos para reactivar aqui.
+        //
+        // if (android.os.Build.VERSION.SDK_INT >= 31) {
+        //     add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+        //     add(android.Manifest.permission.BLUETOOTH_SCAN)
+        //     add(android.Manifest.permission.BLUETOOTH_CONNECT)
+        // }
+        // add(android.Manifest.permission.ACCESS_FINE_LOCATION)
     }.toTypedArray()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
-            .launch(permissions)
+        if (permissions.isNotEmpty()) {
+            registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
+                .launch(permissions)
+        }
 
         // Arranca el servicio en primer plano: mantiene el sensado
         // vivo aunque el usuario minimice la app.
