@@ -50,9 +50,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _sala = MutableStateFlow(EquipoStore.leerSala(app))
     val sala = _sala.asStateFlow()
 
-    /** Nombre que el docente ve en su panel. Vacio = se muestra el numero de equipo. */
-    private val _nombre = MutableStateFlow(EquipoStore.leerNombre(app))
-    val nombre = _nombre.asStateFlow()
+    /** Codigo del alumno guardado para la sesion. */
+    private val _codigo = MutableStateFlow(EquipoStore.leerCodigo(app))
+    val codigo = _codigo.asStateFlow()
 
     /** true solo mientras el alumno esta dentro del examen. */
     private val _unido = MutableStateFlow(false)
@@ -65,12 +65,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _pantalla = MutableStateFlow(Pantalla.INICIO)
     val pantalla = _pantalla.asStateFlow()
 
-    /** El alumno entra al examen: recien aqui el equipo empieza a anunciarse. */
-    fun unirseComoAlumno(nombre: String, sala: Int) {
+    fun unirseComoAlumno(codigo: String, sala: Int) {
         val app = getApplication<Application>()
-        EquipoStore.guardarNombre(app, nombre)
+        EquipoStore.guardarCodigo(app, codigo)
         EquipoStore.guardarSala(app, sala)
-        _nombre.value = EquipoStore.leerNombre(app)
+        _codigo.value = EquipoStore.leerCodigo(app)
         _sala.value = EquipoStore.leerSala(app)
         ultimoPaquete = null
         _unido.value = true
@@ -144,7 +143,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ahora = System.currentTimeMillis()
         if (ahora - ultimaEmision < intervalo) return
 
-        val paquete = PacketCodec.encodeAlumno(idAlumno, _sala.value, _nombre.value, ctx, d)
+        val paquete = PacketCodec.encodeAlumno(idAlumno, _sala.value, _codigo.value, ctx, d)
         // Reanunciar lo mismo solo gasta bateria: el anuncio anterior sigue vigente.
         if (ultimoPaquete?.contentEquals(paquete) == true) return
 

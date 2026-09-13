@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
 
             val pantalla by viewModel.pantalla.collectAsState()
             val sala by viewModel.sala.collectAsState()
-            val nombre by viewModel.nombre.collectAsState()
+            val codigo by viewModel.codigo.collectAsState()
 
             BackHandler(enabled = pantalla != Pantalla.INICIO) { viewModel.salir() }
 
@@ -97,7 +97,7 @@ class MainActivity : ComponentActivity() {
                     }.collectAsState(initial = emptySet())
 
                     HomeScreen(
-                        nombreGuardado = nombre,
+                        codigoGuardado = codigo,
                         salaGuardada = sala,
                         aulasAbiertas = aulas,
                         bluetoothListo = btListo,
@@ -121,7 +121,7 @@ class MainActivity : ComponentActivity() {
                         idAlumno = viewModel.idAlumno,
                         emitiendo = emitiendo,
                         sala = sala,
-                        nombre = nombre,
+                        codigo = codigo,
                         onSalir = viewModel::salir
                     )
                 }
