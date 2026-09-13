@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">VIGÍA UNI</string>
+    <!-- app_name lo define cada flavor en build.gradle.kts (resValue).
+         Si se declara tambien aqui, el build falla por recurso duplicado. -->
 </resources>
