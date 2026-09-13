@@ -18,9 +18,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.vigia.model.AlumnoVigilado
-import com.vigia.transport.Bitacora
-import com.vigia.transport.PadronStore
+import com.vigia.AlumnoVigilado
+import com.vigia.RiskLevel
+import com.vigia.VigilaMode
+import com.vigia.Bitacora
+import com.vigia.PadronStore
 
 @Composable
 fun TeacherScreen(
@@ -266,4 +268,34 @@ private fun PanelBitacora(lineas: List<Bitacora.Linea>, onExportar: () -> Unit) 
             }
         }
     }
+}
+
+@Composable
+private fun Contador(cantidad: Int) {
+    if (cantidad <= 0) return
+    Box(
+        Modifier.clip(RoundedCornerShape(12.dp))
+            .background(Paleta.Intensivo)
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    ) {
+        Text("$cantidad", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Paleta.Blanco)
+    }
+}
+
+private fun colorRiesgo(risk: RiskLevel): Color = when (risk) {
+    RiskLevel.NORMAL -> Paleta.VerdeRiesgo
+    RiskLevel.ELEVADO -> Paleta.AmarilloRiesgo
+    RiskLevel.ALERTA -> Paleta.Intensivo
+}
+
+private fun textoRiesgo(risk: RiskLevel): String = when (risk) {
+    RiskLevel.NORMAL -> "comportamiento normal"
+    RiskLevel.ELEVADO -> "movimiento atípico"
+    RiskLevel.ALERTA -> "comportamiento sospechoso"
+}
+
+private fun textoModo(mode: VigilaMode): String = when (mode) {
+    VigilaMode.MESA -> "sobre la mesa"
+    VigilaMode.MANO -> "en la mano"
+    VigilaMode.BOLSILLO -> "guardado"
 }
