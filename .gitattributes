@@ -1,0 +1,15 @@
+# Normaliza los finales de linea para todo el equipo.
+# Sin esto, cada quien depende de tener core.autocrlf configurado a mano
+# y un solo commit mal hecho reescribe todos los archivos del proyecto.
+
+* text=auto
+
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.mp4  binary
+*.pptx binary
+*.docx binary
+*.pdf  binary
+*.zip  binary
+*.jar  binary
