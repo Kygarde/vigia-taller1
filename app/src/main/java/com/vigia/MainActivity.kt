@@ -3,11 +3,13 @@ package com.vigia
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -127,10 +129,26 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Pantalla.DOCENTE -> {
+                    // Android estrangula el escaneo BLE con la pantalla apagada: el
+                    // panel se quedaria ciego y los alumnos se caerian de la lista.
+                    // El flag solo aplica mientras esta pantalla esta al frente.
+                    DisposableEffect(Unit) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        onDispose {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                    }
+
                     val alumnos by remember(ciclo, permisosOk, sala) {
                         if (permisosOk) scanner.alumnos(sala)
                         else kotlinx.coroutines.flow.flowOf(emptyList())
                     }.collectAsState(initial = emptyList())
+
+                    // Aulas anunciadas que no son la mia: otro panel activo cerca.
+                    val aulas by remember(ciclo, permisosOk) {
+                        if (permisosOk) scanner.aulasAbiertas()
+                        else kotlinx.coroutines.flow.flowOf(emptySet())
+                    }.collectAsState(initial = emptySet())
 
                     val estadoAnuncio by viewModel.estadoAnuncio.collectAsState()
 
@@ -140,6 +158,7 @@ class MainActivity : ComponentActivity() {
                         permisosOk = permisosOk,
                         estadoAnuncio = estadoAnuncio,
                         sala = sala,
+                        otrasAulas = aulas - sala,
                         onPedirPermisos = { pedirPermisos.launch(permisosNecesarios) },
                         onVolver = viewModel::salir
                     )

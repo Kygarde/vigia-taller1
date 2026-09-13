@@ -114,6 +114,11 @@ fun TeacherScreen(
     permisosOk: Boolean,
     estadoAnuncio: EstadoAnuncio,
     sala: Int,
+    /**
+     * Otras aulas que se estan anunciando cerca. Si hay alguna, significa que hay
+     * otro panel de docente activo en el salon. Lo usa Ernesto para el aviso.
+     */
+    otrasAulas: Set<Int>,
     onPedirPermisos: () -> Unit,
     onVolver: () -> Unit
 ) {
