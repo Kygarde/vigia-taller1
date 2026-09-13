@@ -4,6 +4,7 @@ import android.app.Application
 import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.vigia.BuildConfig
 import com.vigia.adaptation.SamplingPolicy
 import com.vigia.decision.AdaptationEngine
 import com.vigia.model.*
@@ -84,6 +85,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * es la unica forma de que los alumnos sepan que ese salon existe.
      */
     fun abrirPanelDocente(sala: Int) {
+<<<<<<< HEAD
+=======
+        // Cinturon de seguridad: aunque el boton no exista en la variante de alumno,
+        // esta puerta queda cerrada por dentro.
+        if (!BuildConfig.ES_DOCENTE) return
+>>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
         val app = getApplication<Application>()
         EquipoStore.guardarSala(app, sala)
         _sala.value = EquipoStore.leerSala(app)

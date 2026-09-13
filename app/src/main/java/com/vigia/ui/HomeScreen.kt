@@ -29,6 +29,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+<<<<<<< HEAD
+=======
+import com.vigia.BuildConfig
+>>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
 import com.vigia.R
 import com.vigia.transport.EquipoStore
 
@@ -110,9 +114,15 @@ fun HomeScreen(
     onEntrarComoAlumno: (String, Int) -> Unit,
     onEntrarComoDocente: (Int) -> Unit
 ) {
+<<<<<<< HEAD
     // rememberSaveable: lo que el usuario escribio no se pierde al girar el equipo.
     var rolNombre by rememberSaveable { mutableStateOf(Rol.NINGUNO.name) }
     val rol = Rol.valueOf(rolNombre)
+=======
+    // El rol NO se elige: lo fija la variante instalada. El alumno no puede
+    // entrar al panel del docente porque ese camino no existe en su APK.
+    val rol = if (BuildConfig.ES_DOCENTE) Rol.DOCENTE else Rol.ALUMNO
+>>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
     var codigo by rememberSaveable { mutableStateOf(codigoGuardado) }
     var sala by rememberSaveable { mutableStateOf(salaGuardada.toString()) }
 
@@ -130,19 +140,31 @@ fun HomeScreen(
             .padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+<<<<<<< HEAD
         Spacer(Modifier.height(if (rol == Rol.NINGUNO) 72.dp else 48.dp))
+=======
+        Spacer(Modifier.height(48.dp))
+>>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
 
         Image(
             painter = painterResource(R.drawable.escudo_uni),
             contentDescription = "Escudo de la Universidad Nacional de Ingeniería",
             contentScale = ContentScale.Fit,
+<<<<<<< HEAD
             modifier = Modifier.size(if (rol == Rol.NINGUNO) 128.dp else 88.dp)
+=======
+            modifier = Modifier.size(96.dp)
+>>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
         )
 
         Spacer(Modifier.height(18.dp))
         Text(
             "VIGÍA UNI",
+<<<<<<< HEAD
             fontSize = if (rol == Rol.NINGUNO) 38.sp else 28.sp,
+=======
+            fontSize = 30.sp,
+>>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
             fontWeight = FontWeight.Bold,
             color = Paleta.Guinda
         )
@@ -154,11 +176,15 @@ fun HomeScreen(
         Spacer(Modifier.height(48.dp))
 
         when (rol) {
+<<<<<<< HEAD
             Rol.NINGUNO -> {
                 BotonPrincipal("Soy alumno") { rolNombre = Rol.ALUMNO.name }
                 Spacer(Modifier.height(14.dp))
                 BotonSecundario("Soy docente") { rolNombre = Rol.DOCENTE.name }
             }
+=======
+            Rol.NINGUNO -> Unit   // inalcanzable: el rol lo fija la variante
+>>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
 
             Rol.ALUMNO -> {
                 Campo(codigo, { codigo = EquipoStore.recortar(it.uppercase()) }, "Código de alumno")
@@ -220,6 +246,7 @@ fun HomeScreen(
             }
         }
 
+<<<<<<< HEAD
         if (rol != Rol.NINGUNO) {
             Spacer(Modifier.height(6.dp))
             TextButton(onClick = { rolNombre = Rol.NINGUNO.name }) {
@@ -227,6 +254,8 @@ fun HomeScreen(
             }
         }
 
+=======
+>>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
         Spacer(Modifier.height(40.dp))
     }
 }
