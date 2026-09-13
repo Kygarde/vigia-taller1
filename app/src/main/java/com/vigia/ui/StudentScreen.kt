@@ -81,7 +81,7 @@ fun StudentScreen(
     idAlumno: Int,
     emitiendo: Boolean,
     sala: Int,
-    nombre: String,
+    codigo: String,
     onSalir: () -> Unit
 ) {
     val color = when (decision.mode) {
@@ -125,7 +125,7 @@ fun StudentScreen(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "$nombre · aula $sala",
+                    "$codigo · aula $sala",
                     color = Paleta.SobreGuinda, fontSize = 12.sp
                 )
                 TextButton(onClick = onSalir) {
@@ -208,7 +208,7 @@ fun StudentScreen(
             Fila("WiFi", onOff(ctx.wifiEnabled), colorOnOff(ctx.wifiEnabled))
             Fila("Datos moviles", onOff(ctx.mobileDataEnabled), colorOnOff(ctx.mobileDataEnabled))
             Fila("Pantalla", if (ctx.screenOn) "encendida" else "apagada")
-            Fila("Este equipo", if (nombre.isNotBlank()) nombre else "sin nombre · $idAlumno")
+            Fila("Este equipo", if (codigo.isNotBlank()) codigo else "sin codigo · $idAlumno")
             Fila("Transmision al docente", onOff(emitiendo), colorOnOff(emitiendo))
 
             Spacer(Modifier.height(18.dp))

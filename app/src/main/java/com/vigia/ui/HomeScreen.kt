@@ -101,7 +101,7 @@ private fun BotonSecundario(texto: String, onClick: () -> Unit) {
 
 @Composable
 fun HomeScreen(
-    nombreGuardado: String,
+    codigoGuardado: String,
     salaGuardada: Int,
     aulasAbiertas: Set<Int>,
     bluetoothListo: Boolean,
@@ -113,7 +113,7 @@ fun HomeScreen(
     // rememberSaveable: lo que el usuario escribio no se pierde al girar el equipo.
     var rolNombre by rememberSaveable { mutableStateOf(Rol.NINGUNO.name) }
     val rol = Rol.valueOf(rolNombre)
-    var nombre by rememberSaveable { mutableStateOf(nombreGuardado) }
+    var codigo by rememberSaveable { mutableStateOf(codigoGuardado) }
     var sala by rememberSaveable { mutableStateOf(salaGuardada.toString()) }
 
     val valorSala = sala.toIntOrNull()
@@ -161,7 +161,7 @@ fun HomeScreen(
             }
 
             Rol.ALUMNO -> {
-                Campo(nombre, { nombre = EquipoStore.recortar(it) }, "Nombre")
+                Campo(codigo, { codigo = EquipoStore.recortar(it) }, "Nombre")
                 Spacer(Modifier.height(12.dp))
                 Campo(
                     sala, { sala = it.filter { c -> c.isDigit() }.take(3) },
@@ -189,8 +189,8 @@ fun HomeScreen(
                 }
 
                 Spacer(Modifier.height(18.dp))
-                BotonPrincipal("Unirme", aulaExiste && nombre.isNotBlank()) {
-                    valorSala?.let { onEntrarComoAlumno(nombre.trim(), it) }
+                BotonPrincipal("Unirme", aulaExiste && codigo.isNotBlank()) {
+                    valorSala?.let { onEntrarComoAlumno(codigo.trim(), it) }
                 }
             }
 

@@ -28,31 +28,40 @@ import com.vigia.model.*
  */
 object PacketCodec {
 
-    const val MANUFACTURER_ID = 0x0BDA   // ID arbitrario del equipo
-    const val VERSION: Byte = 4
+    const val MANUFACTURER_ID = 0x0BDA
+    const val VERSION: Byte = 5              // era 4
 
     const val TIPO_AULA: Byte = 1
     const val TIPO_ALUMNO: Byte = 2
 
     private const val CABECERA_ALUMNO = 11
 
-    /** Baliza del docente: "el aula N esta abierta". */
+    // Banderas del byte [9]
+    private const val F_WIFI     = 0b00001
+    private const val F_DATOS    = 0b00010
+    private const val F_PANTALLA = 0b00100
+    private const val F_SALIO    = 0b01000   // NUEVO
+    private const val F_BLOQUEO  = 0b10000   // NUEVO
+
     fun encodeAula(sala: Int): ByteArray =
         byteArrayOf(VERSION, TIPO_AULA, sala.toByte())
 
     fun encodeAlumno(
         id: Int,
         sala: Int,
-        nombre: String,
+        codigo: String,
         ctx: ContextSnapshot,
-        d: AdaptationDecision
+        d: AdaptationDecision,
+        bloqueado: Boolean = false           // NUEVO, con defecto para no romper nada
     ): ByteArray {
         var flags = 0
-        if (ctx.wifiEnabled) flags = flags or 0b0001
-        if (ctx.mobileDataEnabled) flags = flags or 0b0010
-        if (ctx.screenOn) flags = flags or 0b0100
+        if (ctx.wifiEnabled) flags = flags or F_WIFI
+        if (ctx.mobileDataEnabled) flags = flags or F_DATOS
+        if (ctx.screenOn) flags = flags or F_PANTALLA
+        if (!ctx.appEnPrimerPlano) flags = flags or F_SALIO
+        if (bloqueado) flags = flags or F_BLOQUEO
 
-        val bytesNombre = EquipoStore.recortar(nombre).toByteArray(Charsets.UTF_8)
+        val bytesCodigo = EquipoStore.recortar(codigo).toByteArray(Charsets.UTF_8)
 
         val cabecera = byteArrayOf(
             VERSION,
@@ -64,12 +73,11 @@ object PacketCodec {
             ctx.batteryLevel.toByte(),
             d.mode.ordinal.toByte(),
             flags.toByte(),
-            bytesNombre.size.toByte()
+            bytesCodigo.size.toByte()
         )
-        return cabecera + bytesNombre
+        return cabecera + bytesCodigo
     }
 
-    /** Codigo de aula de cualquier paquete valido, o null si no lo es. */
     fun salaDe(b: ByteArray): Int? {
         if (b.size < 3 || b[0] != VERSION) return null
         return b[2].toInt() and 0xFF
@@ -86,32 +94,36 @@ object PacketCodec {
         val modo = OperatingMode.entries.getOrNull(b[8].toInt()) ?: return null
 
         val largo = (b[10].toInt() and 0xFF).coerceAtMost(b.size - CABECERA_ALUMNO)
-        val nombre = if (largo > 0) String(b, CABECERA_ALUMNO, largo, Charsets.UTF_8) else ""
+        val codigo = if (largo > 0) String(b, CABECERA_ALUMNO, largo, Charsets.UTF_8) else ""
+        val flags = b[9].toInt()
 
         return StudentStatus(
             id = ((b[3].toInt() and 0xFF) shl 8) or (b[4].toInt() and 0xFF),
             sala = b[2].toInt() and 0xFF,
-            nombre = nombre,
+            codigo = codigo,
             risk = riesgo,
             movement = (b[6].toInt() and 0xFF) / 255f,
             battery = b[7].toInt() and 0xFF,
             mode = modo,
-            wifi = (b[9].toInt() and 0b0001) != 0,
-            mobile = (b[9].toInt() and 0b0010) != 0,
-            screenOn = (b[9].toInt() and 0b0100) != 0
+            wifi = (flags and F_WIFI) != 0,
+            mobile = (flags and F_DATOS) != 0,
+            screenOn = (flags and F_PANTALLA) != 0,
+            salioDeLaApp = (flags and F_SALIO) != 0,
+            bloqueado = (flags and F_BLOQUEO) != 0
         )
     }
 }
 
 data class StudentStatus(
-    val id: Int, val sala: Int, val nombre: String,
+    val id: Int, val sala: Int, val codigo: String,
     val risk: RiskLevel, val movement: Float,
     val battery: Int, val mode: OperatingMode,
     val wifi: Boolean, val mobile: Boolean, val screenOn: Boolean,
+    val salioDeLaApp: Boolean = false,        // lo usa Ernesto
+    val bloqueado: Boolean = false,           // lo usa Ernesto
     val lastSeen: Long = System.currentTimeMillis()
 ) {
-    /** Lo que se muestra en el panel: el nombre si lo puso, si no el numero de equipo. */
-    val etiqueta: String get() = if (nombre.isNotBlank()) nombre else "Equipo $id"
+    val etiqueta: String get() = if (codigo.isNotBlank()) codigo else "Equipo $id"
 }
 
 /**
@@ -124,5 +136,9 @@ data class StudentStatus(
  */
 data class AlumnoVigilado(
     val estado: StudentStatus,
-    val incidencias: Int
-)
+    val incidencias: Int,
+    val ausenteDesde: Long? = null,           // NUEVO
+    val enPadron: Boolean = true              // NUEVO
+) {
+    val ausente: Boolean get() = ausenteDesde != null
+}
