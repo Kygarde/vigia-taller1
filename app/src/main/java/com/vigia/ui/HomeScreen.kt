@@ -105,6 +105,8 @@ fun HomeScreen(
     codigoGuardado: String,
     salaGuardada: Int,
     aulasAbiertas: Set<Int>,
+    /** Aula que este mismo equipo anuncio hace poco. null si ninguna. */
+    miAula: Int?,
     bluetoothListo: Boolean,
     permisosOk: Boolean,
     onPedirPermisos: () -> Unit,
@@ -192,26 +194,44 @@ fun HomeScreen(
             }
 
             Rol.DOCENTE -> {
+                // Si ese codigo ya esta en el aire, alguien mas abrio ese panel.
+                // Dos paneles con la misma aula mezclan a los alumnos de los dos
+                // salones en ambas listas, y le abren la puerta a un alumno que
+                // quiera espiar quien esta en alerta.
+                //
+                // Mi propio eco no cuenta: al salir del panel mi baliza sigue
+                // viajando unos segundos, y no tiene sentido bloquearme a mi mismo.
+                val aulaOcupada = salaValida &&
+                    valorSala in aulasAbiertas &&
+                    valorSala != miAula
+
                 Campo(
-                    sala, { sala = it.filter { c -> c.isDigit() }.take(3) },
+                    sala,
+                    { sala = it.filter { c -> c.isDigit() }.take(3) },
                     "Código de aula", numerico = true,
-                    error = sala.isNotEmpty() && !salaValida
+                    error = (sala.isNotEmpty() && !salaValida) || aulaOcupada
                 )
-                if (!permisosOk || !bluetoothListo) {
-                    Spacer(Modifier.height(10.dp))
-                    Aviso(
-                        if (!permisosOk) "Falta conceder el permiso de Bluetooth"
-                        else "Enciende el Bluetooth",
-                        ok = false
-                    )
-                    if (!permisosOk) {
+
+                Spacer(Modifier.height(10.dp))
+                when {
+                    !permisosOk -> {
+                        Aviso("Falta conceder el permiso de Bluetooth", ok = false)
                         TextButton(onClick = onPedirPermisos) {
                             Text("Conceder permiso", fontSize = 14.sp, color = Paleta.Guinda)
                         }
                     }
+                    !bluetoothListo -> Aviso("Enciende el Bluetooth", ok = false)
+                    aulaOcupada -> Aviso(
+                        "El aula $valorSala ya está abierta en otro equipo. " +
+                            "Usa otro código.",
+                        ok = false
+                    )
+                    salaValida -> Aviso("Listo para abrir el aula $valorSala", ok = true)
+                    else -> Aviso("Escribe un código entre 0 y 255", ok = false)
                 }
+
                 Spacer(Modifier.height(24.dp))
-                BotonPrincipal("Abrir panel", salaValida) {
+                BotonPrincipal("Abrir panel", salaValida && !aulaOcupada) {
                     valorSala?.let(onEntrarComoDocente)
                 }
             }

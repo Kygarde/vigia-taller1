@@ -85,6 +85,7 @@ class MainActivity : ComponentActivity() {
             val pantalla by viewModel.pantalla.collectAsState()
             val sala by viewModel.sala.collectAsState()
             val codigo by viewModel.codigo.collectAsState()
+            val miAula by viewModel.miAula.collectAsState()
 
             BackHandler(enabled = pantalla != Pantalla.INICIO) { viewModel.salir() }
 
@@ -102,6 +103,7 @@ class MainActivity : ComponentActivity() {
                         codigoGuardado = codigo,
                         salaGuardada = sala,
                         aulasAbiertas = aulas,
+                        miAula = miAula,
                         bluetoothListo = btListo,
                         permisosOk = permisosOk,
                         onPedirPermisos = { pedirPermisos.launch(permisosNecesarios) },

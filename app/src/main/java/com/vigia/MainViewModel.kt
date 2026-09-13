@@ -13,6 +13,8 @@ import com.vigia.transport.BleAdvertiser
 import com.vigia.transport.EstadoAnuncio
 import com.vigia.transport.PacketCodec
 import com.vigia.transport.EquipoStore
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -84,6 +86,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * El docente abre su panel. No anuncia estado, pero si emite la baliza del aula:
      * es la unica forma de que los alumnos sepan que ese salon existe.
      */
+    /**
+     * Aula que ESTE equipo esta anunciando, o anuncio hace muy poco.
+     *
+     * Al salir del panel el anuncio se detiene, pero la baliza que ya salio sigue
+     * viajando y el escaner la sigue viendo hasta que caduca. Sin esta memoria, el
+     * docente que cierra y reabre su panel se bloquearia a si mismo con su propio eco.
+     */
+    private val _miAula = MutableStateFlow<Int?>(null)
+    val miAula = _miAula.asStateFlow()
+
+    private var olvidarMiAula: Job? = null
+
+    /** Un poco mas que la caducidad del escaner (15 s), para cubrir el eco completo. */
+    private val MEMORIA_MI_AULA_MS = 20_000L
+
     fun abrirPanelDocente(sala: Int) {
         // Cinturon de seguridad: aunque el boton no exista en la variante de alumno,
         // esta puerta queda cerrada por dentro.
@@ -93,6 +110,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _sala.value = EquipoStore.leerSala(app)
         dejarDeAnunciar()
         advertiser.publish(PacketCodec.encodeAula(sala))
+        olvidarMiAula?.cancel()
+        _miAula.value = sala
         _pantalla.value = Pantalla.DOCENTE
     }
 
@@ -100,6 +119,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun salir() {
         dejarDeAnunciar()
         _pantalla.value = Pantalla.INICIO
+
+        // El aula sigue siendo "mia" mientras mi baliza pueda seguir en el aire.
+        olvidarMiAula?.cancel()
+        if (_miAula.value != null) {
+            olvidarMiAula = viewModelScope.launch {
+                delay(MEMORIA_MI_AULA_MS)
+                _miAula.value = null
+            }
+        }
     }
 
     private fun dejarDeAnunciar() {
