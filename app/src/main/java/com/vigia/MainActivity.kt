@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.core.content.ContextCompat
 import com.vigia.transport.BleScanner
 import com.vigia.ui.HomeScreen
+import com.vigia.ui.PantallaBloqueada
 import com.vigia.ui.StudentScreen
 import com.vigia.ui.TeacherScreen
 
@@ -86,10 +87,16 @@ class MainActivity : ComponentActivity() {
             val sala by viewModel.sala.collectAsState()
             val codigo by viewModel.codigo.collectAsState()
             val miAula by viewModel.miAula.collectAsState()
+            val bloqueado by viewModel.bloqueado.collectAsState()
 
             BackHandler(enabled = pantalla != Pantalla.INICIO) { viewModel.salir() }
 
-            when (pantalla) {
+            // El bloqueo NO es una pantalla del examen: es un estado de la app.
+            // Va antes de toda la navegacion, para que siga puesto aunque el alumno
+            // cierre la app y la vuelva a abrir desde cero.
+            if (bloqueado) {
+                PantallaBloqueada(codigo, viewModel::desbloquear)
+            } else when (pantalla) {
 
                 Pantalla.INICIO -> {
                     // Escucha las balizas de aula solo mientras estamos en el inicio,
@@ -167,6 +174,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        viewModel.appVisible(true)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // onStop = la app dejo de estar visible. El ViewModel decide si eso fue
+        // irse a otra app (bloquea) o solo apagar la pantalla (no bloquea).
+        viewModel.appVisible(false)
     }
 
     override fun onResume() {
