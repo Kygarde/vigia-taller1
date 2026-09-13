@@ -20,11 +20,12 @@ import com.vigia.model.*
  *   [6]      indice de movimiento (0..255)
  *   [7]      bateria (%)
  *   [8]      modo de operacion
- *   [9]      banderas: wifi, datos, pantalla
- *   [10]     largo del nombre en bytes
- *   [11..]   nombre en UTF-8
+ *   [9]      banderas: wifi, datos, pantalla, salio de la app, bloqueado
+ *   [10]     largo del codigo en bytes
+ *   [11..]   codigo de alumno en UTF-8
  *
- * El anuncio BLE admite 31 bytes en total, por eso el nombre se limita a 10.
+ * El anuncio BLE admite 31 bytes en total. El codigo UNI son 9 (8 digitos y una
+ * letra), asi que el paquete completo queda en 20 bytes.
  */
 object PacketCodec {
 
