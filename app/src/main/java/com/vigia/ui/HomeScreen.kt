@@ -161,7 +161,7 @@ fun HomeScreen(
             }
 
             Rol.ALUMNO -> {
-                Campo(codigo, { codigo = EquipoStore.recortar(it) }, "Nombre")
+                Campo(codigo, { codigo = EquipoStore.recortar(it.uppercase()) }, "Código de alumno")
                 Spacer(Modifier.height(12.dp))
                 Campo(
                     sala, { sala = it.filter { c -> c.isDigit() }.take(3) },
@@ -189,7 +189,7 @@ fun HomeScreen(
                 }
 
                 Spacer(Modifier.height(18.dp))
-                BotonPrincipal("Unirme", aulaExiste && codigo.isNotBlank()) {
+                BotonPrincipal("Unirme", aulaExiste && EquipoStore.codigoValido(codigo)) {
                     valorSala?.let { onEntrarComoAlumno(codigo.trim(), it) }
                 }
             }
