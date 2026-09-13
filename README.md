@@ -257,12 +257,10 @@ Consecuencias prácticas:
 ### Los dos tipos de anuncio
 
 **Baliza del aula** — 3 bytes, la emite el equipo del docente mientras el panel está
-abierto. Se reafirma cada 3 segundos: Android puede detener el advertising por su
-cuenta —ahorro de energía, pantalla apagada, restricciones del fabricante— y sin esa
-comprobación el aula desaparecería en silencio.
-
-Por el mismo motivo, dentro del examen la pantalla se mantiene encendida en ambos
-roles.
+abierto. El anuncio se reintenta cuando la app vuelve al primer plano y cuando se
+conceden los permisos: Android puede detener el advertising por su cuenta —ahorro de
+energía, restricciones del fabricante— y sin ese reintento el aula desaparecería en
+silencio.
 
 ```
 [0] versión del formato (4)
