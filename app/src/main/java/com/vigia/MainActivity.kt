@@ -129,8 +129,6 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Pantalla.DOCENTE -> {
-<<<<<<< HEAD
-=======
                     // Android estrangula el escaneo BLE con la pantalla apagada: el
                     // panel se quedaria ciego y los alumnos se caerian de la lista.
                     // El flag solo aplica mientras esta pantalla esta al frente.
@@ -141,21 +139,17 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
->>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
                     val alumnos by remember(ciclo, permisosOk, sala) {
                         if (permisosOk) scanner.alumnos(sala)
                         else kotlinx.coroutines.flow.flowOf(emptyList())
                     }.collectAsState(initial = emptyList())
 
-<<<<<<< HEAD
-=======
                     // Aulas anunciadas que no son la mia: otro panel activo cerca.
                     val aulas by remember(ciclo, permisosOk) {
                         if (permisosOk) scanner.aulasAbiertas()
                         else kotlinx.coroutines.flow.flowOf(emptySet())
                     }.collectAsState(initial = emptySet())
 
->>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
                     val estadoAnuncio by viewModel.estadoAnuncio.collectAsState()
 
                     TeacherScreen(
@@ -164,10 +158,7 @@ class MainActivity : ComponentActivity() {
                         permisosOk = permisosOk,
                         estadoAnuncio = estadoAnuncio,
                         sala = sala,
-<<<<<<< HEAD
-=======
                         otrasAulas = aulas - sala,
->>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
                         onPedirPermisos = { pedirPermisos.launch(permisosNecesarios) },
                         onVolver = viewModel::salir
                     )
