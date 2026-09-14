@@ -9,9 +9,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import com.vigia.transport.Bitacora
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -143,7 +156,11 @@ fun TeacherScreen(
 ) {
     val enAlerta = alumnos.count { it.estado.risk == RiskLevel.ALERTA }
     val totalIncidencias = alumnos.sumOf { it.incidencias }
-    val estaDuplicado = otrasAulas.contains(sala)
+    // Ojo: un panel duplicado de MI PROPIA aula no se puede detectar, porque
+    // aulasAbiertas() devuelve codigos de aula y mi propia baliza tambien esta ahi.
+    // Lo que si se ve es que haya otro examen anunciandose cerca, que es cuando
+    // conviene revisar que los codigos no se pisen.
+    val hayOtroPanel = otrasAulas.isNotEmpty()
 
     Column(Modifier.fillMaxSize().navigationBarsPadding()) {
 
@@ -210,29 +227,48 @@ fun TeacherScreen(
             }
         }
 
-        Column(Modifier.weight(1f).padding(horizontal = 22.dp, vertical = 14.dp)) {
-            if (estaDuplicado) {
+        val lineas by Bitacora.lineas.collectAsState()
+        var pestana by rememberSaveable { mutableStateOf(0) }
+        val contexto = LocalContext.current
+
+        TabRow(
+            selectedTabIndex = pestana,
+            containerColor = Paleta.Blanco,
+            contentColor = Paleta.Guinda
+        ) {
+            Tab(pestana == 0, { pestana = 0 }) {
+                Text("Alumnos", Modifier.padding(12.dp), fontSize = 14.sp)
+            }
+            Tab(pestana == 1, { pestana = 1 }) {
+                Text("Bitácora (${lineas.size})", Modifier.padding(12.dp), fontSize = 14.sp)
+            }
+        }
+
+        if (pestana == 1) Column(Modifier.weight(1f)) {
+            PanelBitacora(lineas) {
+                val envio = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Bitácora VIGÍA — aula $sala")
+                    putExtra(android.content.Intent.EXTRA_TEXT, Bitacora.csv())
+                }
+                contexto.startActivity(
+                    android.content.Intent.createChooser(envio, "Exportar bitácora")
+                )
+            }
+        } else Column(Modifier.weight(1f).padding(horizontal = 22.dp, vertical = 14.dp)) {
+            if (hayOtroPanel) {
                 Mensaje(
-                    "¡Atención: Aula Duplicada!",
-                    "Existe otro panel transmitiendo en el aula $sala cerca. " +
-                            "Verifica el número de aula antes de continuar.",
+                    "Hay otro examen cerca",
+                    "Se detectaron otros paneles activos: " +
+                        otrasAulas.sorted().joinToString(", ") { "aula $it" } + ". " +
+                        "Verifica que tu código sea el $sala antes de continuar.",
                     accion = null, onAccion = null
                 )
                 Spacer(Modifier.height(12.dp))
             }
 
-            if (PadronStore.cerrado) {
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                        .background(Paleta.PlomoFondo).padding(10.dp)
-                ) {
-                    Text(
-                        "Padrón cerrado · ${PadronStore.presentes} presentes / ${PadronStore.tamano} registrados",
-                        fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Paleta.Tinta
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-            }
+            BarraPadron(alumnos)
+            Spacer(Modifier.height(10.dp))
 
             when {
                 !permisosOk -> Mensaje(
@@ -286,6 +322,147 @@ private fun Mensaje(
                     containerColor = Paleta.Guinda, contentColor = Paleta.Blanco
                 )
             ) { Text(accion) }
+        }
+    }
+}
+
+/**
+ * Pasar lista y cerrar el padron.
+ *
+ * Mientras el padron esta abierto se acepta a cualquiera. Al cerrarlo queda fijado
+ * que equipos estaban presentes, y cualquier equipo nuevo que aparezca despues sale
+ * marcado. Es lo que acota —no elimina— el problema del segundo celular.
+ */
+@Composable
+private fun BarraPadron(alumnos: List<AlumnoVigilado>) {
+    var cerrado by remember { mutableStateOf(PadronStore.cerrado) }
+    var presentes by rememberSaveable { mutableStateOf("") }
+    var sinEquipo by rememberSaveable { mutableStateOf("") }
+
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .background(Paleta.PlomoFondo).padding(14.dp)
+    ) {
+        if (!cerrado) {
+            Text("Pasar lista", fontSize = 15.sp,
+                fontWeight = FontWeight.Bold, color = Paleta.Tinta)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Pide a todos que enciendan Bluetooth y se unan. Luego cierra la lista.",
+                fontSize = 12.sp, color = Paleta.Plomo
+            )
+            Spacer(Modifier.height(10.dp))
+
+            Row {
+                OutlinedTextField(
+                    value = presentes,
+                    onValueChange = { presentes = it.filter { c -> c.isDigit() }.take(3) },
+                    label = { Text("Presentes") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(10.dp))
+                OutlinedTextField(
+                    value = sinEquipo,
+                    onValueChange = { sinEquipo = it.filter { c -> c.isDigit() }.take(3) },
+                    label = { Text("Sin equipo") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+            Text("Conectados ahora: ${alumnos.size}", fontSize = 12.sp, color = Paleta.Plomo)
+
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = {
+                    PadronStore.cerrar(
+                        alumnos.map { it.estado.id }.toSet(),
+                        presentes.toIntOrNull() ?: alumnos.size,
+                        sinEquipo.toIntOrNull() ?: 0
+                    )
+                    cerrado = true
+                },
+                enabled = alumnos.isNotEmpty(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Paleta.Guinda, contentColor = Paleta.Blanco
+                )
+            ) { Text("Cerrar lista") }
+
+        } else {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "Lista cerrada · ${PadronStore.tamano} equipos",
+                        fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Paleta.Tinta
+                    )
+                    if (PadronStore.sinEquipo > 0) {
+                        Text(
+                            "${PadronStore.sinEquipo} sin equipo — ubicados adelante",
+                            fontSize = 12.sp, color = Paleta.Guinda,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    val faltan = PadronStore.presentes - PadronStore.tamano -
+                        PadronStore.sinEquipo
+                    if (faltan > 0) {
+                        Text(
+                            "⚠ $faltan presentes sin explicar",
+                            fontSize = 12.sp, color = Paleta.Intensivo
+                        )
+                    }
+                }
+                TextButton(onClick = { PadronStore.reabrir(); cerrado = false }) {
+                    Text("Reabrir", fontSize = 12.sp, color = Paleta.Plomo)
+                }
+            }
+        }
+    }
+}
+
+/** El registro del examen, con boton para llevarselo. */
+@Composable
+private fun PanelBitacora(lineas: List<Bitacora.Linea>, onExportar: () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(onClick = onExportar, enabled = lineas.isNotEmpty()) {
+                Text("Exportar", color = Paleta.Guinda, fontSize = 13.sp)
+            }
+        }
+
+        if (lineas.isEmpty()) {
+            Column(Modifier.padding(horizontal = 22.dp)) {
+                Mensaje(
+                    "Sin eventos todavía",
+                    "Aquí se registra todo lo que pasa durante el examen: quién se une, " +
+                        "quién entra en alerta y quién deja de emitir."
+                )
+            }
+        } else {
+            LazyColumn(Modifier.padding(horizontal = 22.dp)) {
+                items(lineas.reversed()) { l ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
+                        Text(
+                            Bitacora.hora(l.hora), fontSize = 12.sp,
+                            color = Paleta.PlomoClaro, modifier = Modifier.width(66.dp)
+                        )
+                        Text(
+                            l.codigo, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                            color = Paleta.Tinta, modifier = Modifier.width(92.dp)
+                        )
+                        Text(l.evento.texto, fontSize = 12.sp, color = Paleta.Plomo)
+                    }
+                    HorizontalDivider(color = Color(0xFFE8EAED))
+                }
+            }
         }
     }
 }

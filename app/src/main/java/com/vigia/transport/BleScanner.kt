@@ -76,15 +76,19 @@ class BleScanner(context: Context) {
     @SuppressLint("MissingPermission")
     fun alumnos(sala: Int) = callbackFlow<List<AlumnoVigilado>> {
 
-        val vistos = linkedMapOf<Int, StudentStatus>()
-        val ausentes = mutableMapOf<Int, Long>()          // id -> cuando se perdio
-        val incidencias = mutableMapOf<Int, Int>()
-        val riesgoPrevio = mutableMapOf<Int, RiskLevel>()
-        val salioPrevio = mutableMapOf<Int, Boolean>()
+        // El historial NO vive aqui: este flujo se recrea cada vez que la Activity
+        // vuelve al primer plano, y el contador de incidencias y la bitacora no
+        // pueden reiniciarse cada vez que el docente mira su celular.
+        SesionExamen.asegurarSala(sala)
+        val vistos = SesionExamen.vistos
+        val ausentes = SesionExamen.ausentes
+        val incidencias = SesionExamen.incidencias
+        val riesgoPrevio = SesionExamen.riesgoPrevio
+        val salioPrevio = SesionExamen.salioPrevio
 
         fun emitir() {
             trySend(
-                vistos.values.map { st ->
+                vistos.values.toList().map { st ->
                     AlumnoVigilado(
                         estado = st,
                         incidencias = incidencias[st.id] ?: 0,
@@ -154,7 +158,7 @@ class BleScanner(context: Context) {
                 delay(2_000)
                 val corte = System.currentTimeMillis() - CADUCIDAD_MS
                 var cambio = false
-                for (st in vistos.values) {
+                for (st in vistos.values.toList()) {
                     if (st.lastSeen < corte && ausentes[st.id] == null) {
                         ausentes[st.id] = st.lastSeen
                         Bitacora.registrar(st.etiqueta, Evento.SIN_SENAL)
