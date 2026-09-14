@@ -92,10 +92,14 @@ private fun FilaAlumno(a: AlumnoVigilado) {
                 fontSize = 13.sp, color = color, fontWeight = FontWeight.Medium
             )
             Text(
-                "${e.mode.name} · ${textoModo(e.mode)}",
-                fontSize = 11.sp, color = Paleta.PlomoClaro
+                buildString {
+                    append("movimiento %.2f".format(e.movement))
+                    append("  ·  batería ${e.battery}%")
+                    if (!e.screenOn) append("  ·  pantalla apagada")
+                },
+                fontSize = 11.sp,
+                color = if (!e.screenOn) Paleta.PlomoClaro else Paleta.Plomo
             )
-            Spacer(Modifier.height(2.dp))
             Text(
                 "movimiento %.2f  ·  batería %d%%".format(e.movement, e.battery),
                 fontSize = 11.sp, color = Paleta.Plomo
