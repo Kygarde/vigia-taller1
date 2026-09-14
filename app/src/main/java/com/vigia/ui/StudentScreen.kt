@@ -12,7 +12,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -215,5 +223,75 @@ fun StudentScreen(
 
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+/**
+ * Lo que ve el alumno que salio de la aplicacion durante el examen.
+ *
+ * El desbloqueo es presencial a proposito: el advertising BLE va del alumno al
+ * docente, no al reves, asi que el docente no tiene forma de levantar el bloqueo
+ * a distancia. Tiene que escribir su PIN en el equipo del alumno.
+ */
+@Composable
+fun PantallaBloqueada(codigo: String, onDesbloquear: (String) -> Boolean) {
+    var pin by rememberSaveable { mutableStateOf("") }
+    var fallo by rememberSaveable { mutableStateOf(false) }
+
+    Column(
+        Modifier.fillMaxSize().background(Paleta.Guinda)
+            .statusBarsPadding().navigationBarsPadding()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            "SALISTE DEL EXAMEN",
+            fontSize = 24.sp, fontWeight = FontWeight.Bold,
+            color = Color.White, textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "La aplicación registró que saliste durante el examen.\n" +
+                "Lleva tu equipo al docente para continuar.",
+            fontSize = 15.sp, color = Paleta.SobreGuinda, textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(codigo, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+
+        Spacer(Modifier.height(48.dp))
+        OutlinedTextField(
+            value = pin,
+            onValueChange = { pin = it.filter { c -> c.isDigit() }.take(6); fallo = false },
+            label = { Text("PIN del docente") },
+            singleLine = true,
+            isError = fallo,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            visualTransformation = PasswordVisualTransformation(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color.White,
+                unfocusedBorderColor = Paleta.SobreGuinda,
+                focusedLabelColor = Color.White,
+                unfocusedLabelColor = Paleta.SobreGuinda,
+                cursorColor = Color.White
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+        if (fallo) {
+            Spacer(Modifier.height(6.dp))
+            Text("PIN incorrecto", fontSize = 13.sp, color = Color(0xFFFFCDD2))
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = { if (!onDesbloquear(pin)) { fallo = true; pin = "" } },
+            enabled = pin.length >= 4,
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White, contentColor = Paleta.Guinda
+            )
+        ) { Text("Desbloquear", fontWeight = FontWeight.Bold) }
     }
 }

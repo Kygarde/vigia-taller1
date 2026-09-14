@@ -1,11 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ExternalStorageConfigurationManager" enabled="true" />
-<<<<<<< HEAD
   <component name="ProjectRootManager" version="2" languageLevel="JDK_25" default="true" project-jdk-name="jbr-25" project-jdk-type="JavaSDK">
-=======
-  <component name="ProjectRootManager" version="2" languageLevel="JDK_25" default="true" project-jdk-name="temurin-25" project-jdk-type="JavaSDK">
->>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
     <output url="file://$PROJECT_DIR$/build/classes" />
   </component>
   <component name="ProjectType">
