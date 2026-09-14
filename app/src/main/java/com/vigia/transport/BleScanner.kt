@@ -1,14 +1,6 @@
 package com.vigia.transport
 
 import android.annotation.SuppressLint
-<<<<<<< HEAD
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanResult
-import com.vigia.model.AlumnoVigilado
-import com.vigia.model.PacketCodec
-import com.vigia.model.RiskLevel
-import com.vigia.model.StudentStatus
-=======
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
@@ -16,19 +8,12 @@ import android.bluetooth.le.ScanSettings
 import android.bluetooth.le.ScanResult
 import android.content.Context
 import com.vigia.model.RiskLevel
->>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-<<<<<<< HEAD
-object BleScanner {
-
-    private const val CADUCIDAD_MS = 15_000L
-
-=======
 /**
  * Escucha los anuncios BLE de la aplicacion.
  *
@@ -88,13 +73,11 @@ class BleScanner(context: Context) {
     }
 
     /** Anuncios de estado de los equipos que declaran el aula indicada. */
->>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
     @SuppressLint("MissingPermission")
     fun alumnos(sala: Int) = callbackFlow<List<AlumnoVigilado>> {
 
         val vistos = linkedMapOf<Int, StudentStatus>()
-<<<<<<< HEAD
-        val ausentes = mutableMapOf<Int, Long>()          // id -> cuando se perdió
+        val ausentes = mutableMapOf<Int, Long>()          // id -> cuando se perdio
         val incidencias = mutableMapOf<Int, Int>()
         val riesgoPrevio = mutableMapOf<Int, RiskLevel>()
         val salioPrevio = mutableMapOf<Int, Boolean>()
@@ -115,23 +98,6 @@ class BleScanner(context: Context) {
                         .thenByDescending { it.incidencias }
                         .thenBy { it.estado.id }
                 )
-=======
-
-        // Historial de la sesion. No se limpia cuando un alumno desaparece: si sale
-        // del alcance y vuelve, sus incidencias siguen contando.
-        val incidencias = mutableMapOf<Int, Int>()
-        val riesgoPrevio = mutableMapOf<Int, RiskLevel>()
-
-        fun emitir() {
-            trySend(
-                vistos.values
-                    .map { AlumnoVigilado(it, incidencias[it.id] ?: 0) }
-                    .sortedWith(
-                        compareByDescending<AlumnoVigilado> { it.estado.risk.ordinal }
-                            .thenByDescending { it.incidencias }
-                            .thenBy { it.estado.id }
-                    )
->>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
             )
         }
 
@@ -139,9 +105,8 @@ class BleScanner(context: Context) {
             override fun onScanResult(type: Int, result: ScanResult) {
                 val crudo = result.scanRecord
                     ?.getManufacturerSpecificData(PacketCodec.MANUFACTURER_ID) ?: return
-<<<<<<< HEAD
                 val status = runCatching { PacketCodec.decodeAlumno(crudo) }.getOrNull() ?: return
-                if (status.sala != sala) return          // es de otro salón
+                if (status.sala != sala) return          // es de otro salon
 
                 // Primera vez que lo vemos
                 if (!vistos.containsKey(status.id)) {
@@ -151,12 +116,13 @@ class BleScanner(context: Context) {
                     }
                 }
 
-                // Estaba ausente y volvió
+                // Estaba ausente y volvio
                 if (ausentes.remove(status.id) != null) {
                     Bitacora.registrar(status.etiqueta, Evento.REGRESO)
                 }
 
-                // Incidencia por entrada en ALERTA
+                // Una incidencia es una ENTRADA en ALERTA, no cada anuncio en ALERTA:
+                // si no, agitar el equipo sumaria decenas de puntos por segundo.
                 val antes = riesgoPrevio[status.id]
                 if (status.risk == RiskLevel.ALERTA && antes != RiskLevel.ALERTA) {
                     incidencias[status.id] = (incidencias[status.id] ?: 0) + 1
@@ -164,39 +130,17 @@ class BleScanner(context: Context) {
                 }
                 riesgoPrevio[status.id] = status.risk
 
-                // Transición al salir de la app
+                // Salir de la app tambien se cuenta por transicion
                 if (status.salioDeLaApp && salioPrevio[status.id] != true) {
                     Bitacora.registrar(status.etiqueta, Evento.SALIO_APP)
                 }
                 salioPrevio[status.id] = status.salioDeLaApp
 
-=======
-                // Un paquete corrupto no debe tumbar la pantalla del docente.
-                val status = runCatching { PacketCodec.decodeAlumno(crudo) }.getOrNull() ?: return
-                if (status.sala != sala) return          // es de otro salon
-
-                // Una incidencia es una ENTRADA en ALERTA, no cada anuncio en ALERTA:
-                // si no, un alumno agitando el equipo sumaria decenas de puntos por segundo.
-                val antes = riesgoPrevio[status.id]
-                if (status.risk == RiskLevel.ALERTA && antes != RiskLevel.ALERTA) {
-                    incidencias[status.id] = (incidencias[status.id] ?: 0) + 1
-                }
-                riesgoPrevio[status.id] = status.risk
-
->>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
                 vistos[status.id] = status
                 emitir()
             }
 
             override fun onScanFailed(errorCode: Int) {
-<<<<<<< HEAD
-                android.util.Log.e("VIGIA_BLE", "Escaneo de alumnos falló: $errorCode")
-            }
-        }
-
-        emitir()
-
-=======
                 android.util.Log.e("VIGIA_BLE", "Escaneo de alumnos fallo: $errorCode")
             }
         }
@@ -204,13 +148,11 @@ class BleScanner(context: Context) {
         arrancar(callback)
         emitir()
 
-        // Da de baja a los equipos que dejaron de emitir.
->>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
+        // Ya NO se borra a nadie: se marca como ausente y se queda a la vista.
         val limpieza = launch {
             while (isActive) {
                 delay(2_000)
                 val corte = System.currentTimeMillis() - CADUCIDAD_MS
-<<<<<<< HEAD
                 var cambio = false
                 for (st in vistos.values) {
                     if (st.lastSeen < corte && ausentes[st.id] == null) {
@@ -220,17 +162,6 @@ class BleScanner(context: Context) {
                     }
                 }
                 if (cambio) emitir()
-            }
-        }
-
-        awaitClose { limpieza.cancel() }
-    }
-}
-=======
-                if (vistos.values.any { it.lastSeen < corte }) {
-                    vistos.entries.removeAll { it.value.lastSeen < corte }
-                    emitir()
-                }
             }
         }
 
@@ -260,4 +191,3 @@ class BleScanner(context: Context) {
         const val CADUCIDAD_MS = 15_000L
     }
 }
->>>>>>> b07581da1f37207dd284c28a40b8506bb2e7a8e2
