@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,26 +25,29 @@ import androidx.compose.ui.unit.sp
 import com.vigia.R
 import com.vigia.model.OperatingMode
 import com.vigia.model.RiskLevel
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import com.vigia.transport.AlumnoVigilado
 import com.vigia.transport.EstadoAnuncio
+import com.vigia.transport.PadronStore
 
-private fun colorRiesgo(riesgo: RiskLevel): Color = when (riesgo) {
-    RiskLevel.NORMAL -> Paleta.Normal
-    RiskLevel.ATENCION -> Paleta.Ahorro
-    RiskLevel.ALERTA -> Paleta.Intensivo
+private fun colorRiesgo(riesgo: RiskLevel, enPadron: Boolean, ausente: Boolean): Color = when {
+    !enPadron -> Paleta.PlomoClaro
+    ausente -> Paleta.Plomo
+    riesgo == RiskLevel.ALERTA -> Paleta.Intensivo
+    riesgo == RiskLevel.ATENCION -> Paleta.Ahorro
+    else -> Paleta.Normal
 }
 
-private fun textoRiesgo(riesgo: RiskLevel): String = when (riesgo) {
-    RiskLevel.NORMAL -> "Sin novedad"
-    RiskLevel.ATENCION -> "Requiere atención"
-    RiskLevel.ALERTA -> "Usando el equipo"
+private fun textoRiesgo(riesgo: RiskLevel, enPadron: Boolean, ausente: Boolean): String = when {
+    !enPadron -> "NO REGISTRADO EN PADRÓN"
+    ausente -> "Sin señal (ausente)"
+    riesgo == RiskLevel.ALERTA -> "Usando el equipo"
+    riesgo == RiskLevel.ATENCION -> "Requiere atención"
+    else -> "Sin novedad"
 }
 
 private fun textoModo(modo: OperatingMode): String = when (modo) {
     OperatingMode.NORMAL -> "vigilancia estándar"
-    OperatingMode.INTENSIVO -> "vigilancia reforzada"
+    OperatingMode.INTENSIVO -> "vigilancia reinforced"
     OperatingMode.AHORRO -> "consumo reducido"
     OperatingMode.DESCONECTADO -> "sin enlace"
 }
@@ -73,7 +78,8 @@ private fun Contador(puntos: Int) {
 @Composable
 private fun FilaAlumno(a: AlumnoVigilado) {
     val e = a.estado
-    val color = colorRiesgo(e.risk)
+    val ausente = a.ausenteDesde != null
+    val color = colorRiesgo(e.risk, a.enPadron, ausente)
 
     Row(
         Modifier.fillMaxWidth().padding(vertical = 12.dp),
@@ -83,25 +89,38 @@ private fun FilaAlumno(a: AlumnoVigilado) {
         Spacer(Modifier.width(14.dp))
 
         Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    e.etiqueta,
+                    fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Paleta.Tinta
+                )
+                if (!a.enPadron) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "[FUERA DE PADRÓN]",
+                        fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Paleta.Guinda
+                    )
+                }
+            }
             Text(
-                e.etiqueta,
-                fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Paleta.Tinta
-            )
-            Text(
-                textoRiesgo(e.risk),
+                textoRiesgo(e.risk, a.enPadron, ausente),
                 fontSize = 13.sp, color = color, fontWeight = FontWeight.Medium
             )
             Text(
-                buildString {
-                    append("movimiento %.2f".format(e.movement))
-                    append("  ·  batería ${e.battery}%")
-                    if (!e.screenOn) append("  ·  pantalla apagada")
-                },
-                fontSize = 11.sp,
-                color = if (!e.screenOn) Paleta.PlomoClaro else Paleta.Plomo
+                "${e.mode.name} · ${textoModo(e.mode)}",
+                fontSize = 11.sp, color = Paleta.PlomoClaro
             )
+            Spacer(Modifier.height(2.dp))
             Text(
-                "movimiento %.2f  ·  batería %d%%".format(e.movement, e.battery),
+                buildString {
+                    append("movimiento %.2f  ·  batería %d%%".format(e.movement, e.battery))
+                    if (!e.screenOn) append("  ·  pantalla off")
+                    if (e.salioDeLaApp) append("  ·  FUERA APP")
+                    a.ausenteDesde?.let { t ->
+                        val segs = (System.currentTimeMillis() - t) / 1000
+                        append("  ·  ausente ${segs}s")
+                    }
+                },
                 fontSize = 11.sp, color = Paleta.Plomo
             )
         }
@@ -118,16 +137,13 @@ fun TeacherScreen(
     permisosOk: Boolean,
     estadoAnuncio: EstadoAnuncio,
     sala: Int,
-    /**
-     * Otras aulas que se estan anunciando cerca. Si hay alguna, significa que hay
-     * otro panel de docente activo en el salon. Lo usa Ernesto para el aviso.
-     */
     otrasAulas: Set<Int>,
     onPedirPermisos: () -> Unit,
     onVolver: () -> Unit
 ) {
     val enAlerta = alumnos.count { it.estado.risk == RiskLevel.ALERTA }
     val totalIncidencias = alumnos.sumOf { it.incidencias }
+    val estaDuplicado = otrasAulas.contains(sala)
 
     Column(Modifier.fillMaxSize().navigationBarsPadding()) {
 
@@ -195,6 +211,29 @@ fun TeacherScreen(
         }
 
         Column(Modifier.weight(1f).padding(horizontal = 22.dp, vertical = 14.dp)) {
+            if (estaDuplicado) {
+                Mensaje(
+                    "¡Atención: Aula Duplicada!",
+                    "Existe otro panel transmitiendo en el aula $sala cerca. " +
+                            "Verifica el número de aula antes de continuar.",
+                    accion = null, onAccion = null
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+
+            if (PadronStore.cerrado) {
+                Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        .background(Paleta.PlomoFondo).padding(10.dp)
+                ) {
+                    Text(
+                        "Padrón cerrado · ${PadronStore.presentes} presentes / ${PadronStore.tamano} registrados",
+                        fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Paleta.Tinta
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+
             when {
                 !permisosOk -> Mensaje(
                     "Falta el permiso de Bluetooth",
@@ -208,7 +247,7 @@ fun TeacherScreen(
                 estadoAnuncio !is EstadoAnuncio.Anunciando -> Mensaje(
                     "El aula no se está anunciando",
                     "Motivo: ${estadoAnuncio.mensaje}. Sin la señal del aula los alumnos " +
-                        "no pueden unirse."
+                            "no pueden unirse."
                 )
                 alumnos.isEmpty() -> Mensaje(
                     "Aula $sala abierta",

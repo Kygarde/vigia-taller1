@@ -168,6 +168,7 @@ class BleScanner(context: Context) {
         awaitClose { limpieza.cancel(); detener(callback) }
     }
 
+
     // ---------------------------------------------------------------- interno
 
     @SuppressLint("MissingPermission")
