@@ -10,9 +10,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.core.content.ContextCompat
 import com.vigia.transport.BleScanner
@@ -88,13 +91,34 @@ class MainActivity : ComponentActivity() {
             val codigo by viewModel.codigo.collectAsState()
             val miAula by viewModel.miAula.collectAsState()
             val bloqueado by viewModel.bloqueado.collectAsState()
+            val examenTerminado by viewModel.examenTerminado.collectAsState()
+            val pinAula by viewModel.pinAula.collectAsState()
 
-            BackHandler(enabled = pantalla != Pantalla.INICIO) { viewModel.salir() }
+            // Dentro del examen el boton atras no hace nada: el alumno no puede
+            // irse por su cuenta y el docente cierra con "Finalizar examen". Si
+            // bastara con atras, el bloqueo por salir de la app no tendria sentido.
+            BackHandler(enabled = pantalla != Pantalla.INICIO || bloqueado) { }
 
             // El bloqueo NO es una pantalla del examen: es un estado de la app.
             // Va antes de toda la navegacion, para que siga puesto aunque el alumno
             // cierre la app y la vuelva a abrir desde cero.
             if (bloqueado) {
+                // Aqui tambien se vigila el aula, pero solo para dejar de emitir:
+                // el bloqueo no se levanta solo. Sin esto, un equipo bloqueado se
+                // quedaria anunciando dias despues de terminado el examen.
+                val aulasB by remember(ciclo, permisosOk) {
+                    if (permisosOk) scanner.aulasAbiertas()
+                    else kotlinx.coroutines.flow.flowOf(emptyMap())
+                }.collectAsState(initial = emptyMap())
+                val snapshotB by viewModel.snapshot.collectAsState()
+
+                VigilarFinDelExamen(
+                    aulaViva = sala in aulasB,
+                    permisosOk = permisosOk,
+                    pantallaEncendida = snapshotB.screenOn,
+                    onTerminado = viewModel::avisarExamenTerminado
+                )
+
                 PantallaBloqueada(codigo, viewModel::desbloquear)
             } else when (pantalla) {
 
@@ -103,14 +127,15 @@ class MainActivity : ComponentActivity() {
                     // y solo si ya hay permisos: si no, el flujo naceria sordo.
                     val aulas by remember(ciclo, permisosOk) {
                         if (permisosOk) scanner.aulasAbiertas()
-                        else kotlinx.coroutines.flow.flowOf(emptySet())
-                    }.collectAsState(initial = emptySet())
+                        else kotlinx.coroutines.flow.flowOf(emptyMap())
+                    }.collectAsState(initial = emptyMap())
 
                     HomeScreen(
                         codigoGuardado = codigo,
                         salaGuardada = sala,
                         aulasAbiertas = aulas,
                         miAula = miAula,
+                        examenTerminado = examenTerminado,
                         bluetoothListo = btListo,
                         permisosOk = permisosOk,
                         onPedirPermisos = { pedirPermisos.launch(permisosNecesarios) },
@@ -125,6 +150,21 @@ class MainActivity : ComponentActivity() {
                     val samplingLabel by viewModel.samplingLabel.collectAsState()
                     val emitiendo by viewModel.emitiendo.collectAsState()
 
+                    // Un aula existe mientras el docente la anuncia. Si la baliza
+                    // desaparece, el examen termino: es el unico aviso que el alumno
+                    // puede recibir, porque el advertising va en un solo sentido.
+                    val aulas by remember(ciclo, permisosOk) {
+                        if (permisosOk) scanner.aulasAbiertas()
+                        else kotlinx.coroutines.flow.flowOf(emptyMap())
+                    }.collectAsState(initial = emptyMap())
+
+                    VigilarFinDelExamen(
+                        aulaViva = sala in aulas,
+                        permisosOk = permisosOk,
+                        pantallaEncendida = snapshot.screenOn,
+                        onTerminado = viewModel::avisarExamenTerminado
+                    )
+
                     StudentScreen(
                         ctx = snapshot,
                         decision = decision,
@@ -132,8 +172,7 @@ class MainActivity : ComponentActivity() {
                         idAlumno = viewModel.idAlumno,
                         emitiendo = emitiendo,
                         sala = sala,
-                        codigo = codigo,
-                        onSalir = viewModel::salir
+                        codigo = codigo
                     )
                 }
 
@@ -156,8 +195,8 @@ class MainActivity : ComponentActivity() {
                     // Aulas anunciadas que no son la mia: otro panel activo cerca.
                     val aulas by remember(ciclo, permisosOk) {
                         if (permisosOk) scanner.aulasAbiertas()
-                        else kotlinx.coroutines.flow.flowOf(emptySet())
-                    }.collectAsState(initial = emptySet())
+                        else kotlinx.coroutines.flow.flowOf(emptyMap())
+                    }.collectAsState(initial = emptyMap())
 
                     val estadoAnuncio by viewModel.estadoAnuncio.collectAsState()
 
@@ -167,9 +206,10 @@ class MainActivity : ComponentActivity() {
                         permisosOk = permisosOk,
                         estadoAnuncio = estadoAnuncio,
                         sala = sala,
-                        otrasAulas = aulas - sala,
+                        pinAula = pinAula,
+                        otrasAulas = aulas.keys - sala,
                         onPedirPermisos = { pedirPermisos.launch(permisosNecesarios) },
-                        onVolver = viewModel::salir
+                        onFinalizar = viewModel::finalizarExamen
                     )
                 }
             }
@@ -193,5 +233,40 @@ class MainActivity : ComponentActivity() {
         // El usuario pudo conceder permisos o encender el Bluetooth desde Ajustes.
         cicloBluetooth.intValue++
         viewModel.reanunciarAula()
+    }
+}
+
+/**
+ * Libera el equipo cuando el aula deja de anunciarse.
+ *
+ * Dos condiciones que parecen detalles y no lo son:
+ *
+ * La espera es corta porque la baliza YA caduca a los 15 s en el escaner. Sumar otros
+ * 25 daba casi 40 segundos entre que el docente finaliza y el alumno se entera.
+ *
+ * Y solo cuenta con la pantalla encendida: Android estrangula el escaneo BLE con la
+ * pantalla apagada, asi que un alumno que bloquea su celular deja de ver la baliza
+ * aunque el examen siga. Sin esta condicion lo estariamos echando del examen por
+ * apagar la pantalla.
+ */
+@Composable
+private fun VigilarFinDelExamen(
+    aulaViva: Boolean,
+    permisosOk: Boolean,
+    pantallaEncendida: Boolean,
+    onTerminado: () -> Unit
+) {
+    // No se echa a nadie por un aula que nunca llegamos a ver. El flujo de escaneo
+    // se recrea en cada onResume y arranca con el conjunto vacio: sin esta guarda,
+    // volver a la app echaria al alumno del examen ocho segundos despues.
+    val vistaAlgunaVez = remember { mutableStateOf(false) }
+    LaunchedEffect(aulaViva) { if (aulaViva) vistaAlgunaVez.value = true }
+
+    LaunchedEffect(aulaViva, permisosOk, pantallaEncendida, vistaAlgunaVez.value) {
+        if (aulaViva || !permisosOk || !pantallaEncendida || !vistaAlgunaVez.value) {
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(8_000)
+        onTerminado()
     }
 }

@@ -14,6 +14,7 @@ import com.vigia.transport.BleAdvertiser
 import com.vigia.transport.BloqueoStore
 import com.vigia.transport.EstadoAnuncio
 import com.vigia.transport.PacketCodec
+import com.vigia.transport.SesionExamen
 import com.vigia.transport.EquipoStore
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -81,6 +82,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var enPrimerPlano = true
 
     /**
+     * true solo cuando se confirmo que el alumno se fue a OTRA aplicacion.
+     *
+     * Distinto de enPrimerPlano: la app tambien deja de estar al frente cuando se
+     * apaga la pantalla, y eso no es irse. El panel del docente muestra esto, asi que
+     * la diferencia no es cosmetica: es un senalamiento contra el alumno.
+     */
+    private var fueraDeLaApp = false
+
+    /**
      * La Activity avisa cuando la app deja de estar visible.
      *
      * Se usa onStop y no onPause: onPause tambien se dispara con el dialogo de
@@ -91,18 +101,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * NO es salir de la app.
      */
     fun appVisible(visible: Boolean) {
-        val cambio = enPrimerPlano != visible
         enPrimerPlano = visible
         if (!_unido.value) return
 
-        // El estado del foco cambio: el docente tiene que enterarse ahora, no en el
-        // proximo latido del sensor.
-        if (cambio) forzarEmision()
+        if (visible) {
+            if (fueraDeLaApp) {
+                fueraDeLaApp = false
+                forzarEmision()
+            }
+            return
+        }
 
-        if (visible) return
         viewModelScope.launch {
             delay(ESPERA_ANTES_DE_BLOQUEAR_MS)
+            // Apagar la pantalla NO es salir de la aplicacion. Por eso se confirma
+            // con isInteractive antes de marcar nada: si la pantalla ya esta apagada,
+            // el alumno bloqueo su celular, no se fue a otro lado.
             if (!enPrimerPlano && powerManager.isInteractive) {
+                fueraDeLaApp = true
                 _bloqueado.value = true
                 BloqueoStore.guardar(getApplication(), true)
                 forzarEmision()
@@ -110,11 +126,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Solo con el PIN del docente, y presencialmente. */
+    /** Solo con el PIN que el docente eligio para ESTA aula, y presencialmente. */
     fun desbloquear(pin: String): Boolean {
-        if (pin != BloqueoStore.PIN_DOCENTE) return false
+        val esperada = BloqueoStore.leerHuella(getApplication())
+        if (esperada == -1) return false
+        if (PacketCodec.huellaPin(pin, _sala.value) != esperada) return false
         _bloqueado.value = false
+        fueraDeLaApp = false
         BloqueoStore.guardar(getApplication(), false)
+        // Si seguia dentro del examen, vuelve a su pantalla, no al inicio.
+        if (_unido.value) _pantalla.value = Pantalla.ALUMNO
         forzarEmision()
         return true
     }
@@ -133,11 +154,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         emitirSiCorresponde(_snapshot.value, _decision.value)
     }
 
-    fun unirseComoAlumno(codigo: String, sala: Int) {
+    /**
+     * El alumno entra al examen.
+     *
+     * Se queda con la huella del PIN que venia en la baliza de esa aula: es lo que le
+     * permitira validar el PIN del docente si termina bloqueado, sin haber conocido
+     * nunca los cuatro digitos.
+     */
+    fun unirseComoAlumno(codigo: String, sala: Int, huellaPin: Int) {
         if (_bloqueado.value) return      // un equipo bloqueado no vuelve al examen
+        _examenTerminado.value = false
         val app = getApplication<Application>()
         EquipoStore.guardarCodigo(app, codigo)
         EquipoStore.guardarSala(app, sala)
+        BloqueoStore.guardarHuella(app, huellaPin)
         _codigo.value = EquipoStore.leerCodigo(app)
         _sala.value = EquipoStore.leerSala(app)
         ultimoPaquete = null
@@ -170,26 +200,78 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Margen para distinguir "se apago la pantalla" de "se fue a otra app". */
     private val ESPERA_ANTES_DE_BLOQUEAR_MS = 700L
 
-    fun abrirPanelDocente(sala: Int) {
+    /** Cuanto se repite el aviso de cierre, para que no se pierda ningun alumno. */
+    private val AVISO_DE_CIERRE_MS = 12_000L
+
+    /** PIN de desbloqueo del examen en curso. Lo elige el docente al abrir el aula. */
+    private val _pinAula = MutableStateFlow("")
+    val pinAula = _pinAula.asStateFlow()
+
+    fun abrirPanelDocente(sala: Int, pin: String) {
         // Cinturon de seguridad: aunque el boton no exista en la variante de alumno,
         // esta puerta queda cerrada por dentro.
         if (!BuildConfig.ES_DOCENTE) return
         val app = getApplication<Application>()
         EquipoStore.guardarSala(app, sala)
         _sala.value = EquipoStore.leerSala(app)
+        _pinAula.value = pin
         dejarDeAnunciar()
-        advertiser.publish(PacketCodec.encodeAula(sala))
+        advertiser.publish(PacketCodec.encodeAula(sala, PacketCodec.huellaPin(pin, sala)))
         olvidarMiAula?.cancel()
         _miAula.value = sala
         _pantalla.value = Pantalla.DOCENTE
     }
 
-    /** Vuelve al inicio y deja de anunciar. */
-    fun salir() {
+    /**
+     * true cuando al alumno se le acabo el examen porque el aula dejo de anunciarse.
+     * Es lo unico que le dice que termino: el docente no tiene canal de vuelta.
+     */
+    private val _examenTerminado = MutableStateFlow(false)
+    val examenTerminado = _examenTerminado.asStateFlow()
+
+    /**
+     * La baliza del aula desaparecio: el docente cerro el examen.
+     *
+     * NO levanta el bloqueo, a proposito. Si bastara con que el aula dejara de verse,
+     * al alumno bloqueado le alcanzaria con alejarse treinta segundos del salon para
+     * volver limpio, y el mecanismo entero seria decorativo. El bloqueo lo levanta el
+     * docente con su PIN, presencialmente, que es lo que dice el protocolo.
+     */
+    fun avisarExamenTerminado() {
+        if (!_unido.value) return
         dejarDeAnunciar()
+
+        // Un equipo bloqueado deja de emitir —el examen acabo, no hay a quien
+        // reportarle— pero sigue bloqueado. Son dos cosas distintas: una es gastar
+        // radio y bateria para nada, la otra es la sancion, que solo levanta el PIN.
+        if (_bloqueado.value) return
+
+        _examenTerminado.value = true
+        _pantalla.value = Pantalla.INICIO
+    }
+
+    /** El docente cierra el examen: deja de anunciar y borra la sesion. */
+    fun finalizarExamen() {
+        if (!BuildConfig.ES_DOCENTE) return
+        SesionExamen.finalizar()
+        val salaCerrada = _sala.value
+        _pinAula.value = ""          // el PIN muere con el examen
+        _unido.value = false
+        ultimoPaquete = null
+        _emitiendo.value = false
         _pantalla.value = Pantalla.INICIO
 
-        // El aula sigue siendo "mia" mientras mi baliza pueda seguir en el aire.
+        // En vez de callarse de golpe, anuncia el cierre unos segundos: asi los
+        // alumnos salen en el acto en vez de esperar a que caduque la baliza.
+        advertiser.publish(PacketCodec.encodeCierre(salaCerrada))
+        viewModelScope.launch {
+            delay(AVISO_DE_CIERRE_MS)
+            runCatching { advertiser.stop() }
+        }
+
+        // El aula sigue contando como "mia" mientras mi baliza pueda seguir en el
+        // aire: si el docente reabre el mismo codigo de inmediato, no debe toparse
+        // con su propio eco.
         olvidarMiAula?.cancel()
         if (_miAula.value != null) {
             olvidarMiAula = viewModelScope.launch {
@@ -198,6 +280,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
 
     private fun dejarDeAnunciar() {
         _unido.value = false
@@ -211,7 +294,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_pantalla.value == Pantalla.DOCENTE &&
             advertiser.estado.value !is EstadoAnuncio.Anunciando
         ) {
-            advertiser.publish(PacketCodec.encodeAula(_sala.value))
+            advertiser.publish(
+                PacketCodec.encodeAula(
+                    _sala.value,
+                    PacketCodec.huellaPin(_pinAula.value, _sala.value)
+                )
+            )
         }
     }
 
@@ -253,7 +341,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // El contexto lleva si la app esta al frente; el bloqueo va aparte.
         // Un equipo bloqueado SIGUE emitiendo: si dejara de hacerlo, el docente lo
         // veria como "sin senal" en vez de "salio de la app", que es otra cosa.
-        val ctxConFoco = ctx.copy(appEnPrimerPlano = enPrimerPlano)
+        val ctxConFoco = ctx.copy(appEnPrimerPlano = !fueraDeLaApp)
         val paquete = PacketCodec.encodeAlumno(
             idAlumno, _sala.value, _codigo.value, ctxConFoco, d, _bloqueado.value
         )
