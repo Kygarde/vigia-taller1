@@ -1,50 +1,85 @@
 # VIGÍA UNI
 
-Aplicación Android que **detecta el contexto del propio dispositivo y adapta
+Sistema Android que **detecta el contexto del propio dispositivo y adapta
 automáticamente su comportamiento de sensado**, sin que el usuario configure nada.
 
-Es la aplicación del alumno dentro de un sistema de monitoreo de exámenes: observa
-cuánto se mueve el equipo, cuánta batería le queda, por dónde está conectado y si la
-pantalla está encendida; con eso decide un nivel de riesgo y un modo de operación,
-cambia la frecuencia con la que muestrea sus sensores, y anuncia su estado al panel
-del docente por Bluetooth.
+Supervisa exámenes presenciales sin invadir: no accede a cámara, micrófono,
+contenido de pantalla ni ubicación GPS, y no consume los datos del alumno. El
+equipo de cada alumno observa cuánto se mueve, cuánta batería le queda, por dónde
+está conectado y si la pantalla está encendida; con eso decide un nivel de riesgo y
+un modo de operación, cambia la frecuencia con la que muestrea sus sensores, y
+anuncia su estado al panel del docente por Bluetooth. Sin servidor y sin red.
 
 **Taller 1 — Desarrollo Adaptativo e Integración de Sistemas · UNI 2026-2**
+Versión **2.0**
 
 ---
 
 ## Índice
 
-1. [Capturas](#capturas)
-2. [Qué hace](#qué-hace)
-3. [Requisitos](#requisitos)
-4. [Instalación](#instalación)
-5. [Cómo se usa](#cómo-se-usa)
-6. [Cómo provocar cada adaptación](#cómo-provocar-cada-adaptación)
-7. [Transporte BLE](#transporte-ble)
-8. [Permisos](#permisos)
-9. [Arquitectura](#arquitectura)
-10. [Ajustar los umbrales](#ajustar-los-umbrales)
-11. [Problemas frecuentes](#problemas-frecuentes)
-12. [Integrantes](#integrantes)
+1. [Dos aplicaciones, un solo código](#dos-aplicaciones-un-solo-código)
+2. [Capturas](#capturas)
+3. [Qué hace](#qué-hace)
+4. [Requisitos](#requisitos)
+5. [Instalación](#instalación)
+6. [El ciclo del examen](#el-ciclo-del-examen)
+7. [Cómo provocar cada adaptación](#cómo-provocar-cada-adaptación)
+8. [Bloqueo por salir de la aplicación](#bloqueo-por-salir-de-la-aplicación)
+9. [Padrón, matrícula y bitácora](#padrón-matrícula-y-bitácora)
+10. [Transporte BLE](#transporte-ble)
+11. [Permisos y privacidad](#permisos-y-privacidad)
+12. [Arquitectura](#arquitectura)
+13. [Ajustar los umbrales](#ajustar-los-umbrales)
+14. [Problemas frecuentes](#problemas-frecuentes)
+15. [Integrantes](#integrantes)
+
+---
+
+## Dos aplicaciones, un solo código
+
+El rol **no se elige en una pantalla**: lo fija la variante instalada. El proyecto
+declara dos *product flavors* de Gradle sobre la misma base de código:
+
+| Variante | Nombre en el equipo | `applicationId` | Qué hace |
+|---|---|---|---|
+| `alumno` | **VIGÍA Alumno** | `com.vigia.alumno` | Mide y emite |
+| `docente` | **VIGÍA Docente** | `com.vigia.docente` | Escucha, consolida el aula y registra |
+
+```kotlin
+flavorDimensions += "rol"
+productFlavors {
+    create("alumno")  { applicationIdSuffix = ".alumno";  buildConfigField("boolean", "ES_DOCENTE", "false") }
+    create("docente") { applicationIdSuffix = ".docente"; buildConfigField("boolean", "ES_DOCENTE", "true")  }
+}
+```
+
+**Por qué así y no con un botón.** Un alumno no puede entrar al panel del docente
+porque **ese camino no existe en su APK**: no es una validación que se pueda saltar,
+es código que no está compilado. Como los `applicationId` son distintos, las dos
+variantes conviven en un mismo equipo sin pisarse — útil para probar con un solo
+celular.
 
 ---
 
 ## Capturas
 
+> Algunas capturas se tomaron en la versión 1.x y no muestran los campos añadidos en
+> la 2.0 (PIN del docente, pasar lista, pestaña de bitácora). El flujo que ilustran
+> sigue siendo el mismo.
+
 ### El recorrido, de principio a fin
 
-| 1. Elegir rol | 2. El docente abre el aula | 3. El panel escucha |
+| 1. El docente abre el aula | 2. El panel escucha | 3. El alumno se une |
 |---|---|---|
-| ![Pantalla de inicio](docs/img/inicio.png) | ![Crear aula](docs/img/docente-crear-aula.png) | ![Panel del docente](docs/img/panel-docente.png) |
-| Alumno o docente | Dicta el código al salón | Los alumnos aparecen al unirse |
+| ![Crear aula](docs/img/docente-crear-aula.png) | ![Panel del docente](docs/img/panel-docente.png) | ![Aula no abierta](docs/img/alumno-aula-no-abierta.png) |
+| Código de aula + PIN de desbloqueo | Los alumnos aparecen al unirse | **Unirme** sigue bloqueado hasta escuchar el aula |
 
-| 4. El alumno se une | 5. Monitoreo en curso |
-|---|---|
-| ![Aula no abierta](docs/img/alumno-aula-no-abierta.png) | ![Alumno transmitiendo](docs/img/alumno-transmitiendo.png) |
-| **Unirme** sigue bloqueado hasta escuchar el aula | Modo, contexto y `Transmisión al docente: ON` |
+| 4. Monitoreo en curso |
+|---|
+| ![Alumno transmitiendo](docs/img/alumno-transmitiendo.png) |
+| Modo, contexto y `Reportando al docente: ON` |
 
-La cuarta captura muestra la validación funcionando: el código está escrito pero el
+La tercera captura muestra la validación funcionando: el código está escrito pero el
 equipo todavía no ha escuchado la baliza de esa aula, así que el botón permanece
 deshabilitado. **Un aula solo existe mientras el docente la está anunciando.**
 
@@ -75,6 +110,10 @@ real.
 | **A1** | Movimiento sostenido con la pantalla encendida | Modo `INTENSIVO`: sube el muestreo a 5 Hz y la emisión BLE a 200 ms |
 | **A2** | Batería < 15 % o ahorro de energía del sistema | Modo `AHORRO`: baja el muestreo a 0.2 Hz y la emisión a 5 s |
 
+Hay una **jerarquía explícita: la batería gana sobre el riesgo.** Si las dos
+condiciones se cumplen a la vez, el modo resultante es `AHORRO`, porque un equipo
+apagado no vigila nada.
+
 Los cuatro modos son `NORMAL`, `INTENSIVO`, `AHORRO` y `DESCONECTADO`. La pantalla
 muestra en todo momento el modo activo, el motivo del último cambio y la frecuencia
 de muestreo vigente.
@@ -82,15 +121,32 @@ de muestreo vigente.
 Nada de esto lo activa el usuario: la condición la detecta el software, la decisión
 se produce sola y el efecto es observable en pantalla.
 
+### La regla de decisión
+
+El riesgo asciende a `ALERTA` solo si se cumplen las tres condiciones a la vez:
+
+```
+índice de movimiento > 0.25   Y   sostenido 1.2 s   Y   pantalla encendida
+```
+
+**La adaptación no se dispara al cruzar un umbral, sino al sostenerlo.** Un golpe
+puntual produce un pico alto pero brevísimo; manipular un celular produce movimiento
+prolongado. Escribir junto al equipo no eleva el riesgo; levantarlo y usarlo, sí.
+
 ### El pipeline
 
 ```
 CONTEXTO      →   PROCESAMIENTO   →   DECISIÓN        →   ADAPTACIÓN
 sensing/          processing/         decision/           adaptation/ + ui/
 4 providers       ventana + EMA       riesgo + modo       frecuencia + pantalla
-                                                          transport/
-                                                          anuncio BLE
+    ▲                                                     transport/ → anuncio BLE
+    │                                                         │
+    └──────────── realimentación: la salida reconfigura la captura
 ```
+
+La realimentación es lo que hace al sistema **adaptativo y no meramente
+configurable**: la salida de la última etapa modifica la frecuencia de captura de la
+primera, en tiempo de ejecución.
 
 ---
 
@@ -99,8 +155,8 @@ sensing/          processing/         decision/           adaptation/ + ui/
 - **Android 8.0 (API 26) o superior**
 - **Celular físico.** El emulador no sirve: no tiene acelerómetro real ni reporta el
   modo de ahorro de energía del sistema.
-- **Bluetooth** para el panel del docente. La app funciona sin él, pero sin transmitir.
-- **Dos equipos** para probar el panel: uno como alumno y otro como docente.
+- **Bluetooth** en los dos equipos.
+- **Dos equipos** como mínimo: uno con VIGÍA Alumno y otro con VIGÍA Docente.
 - Android Studio con JDK 11 o superior
 
 ---
@@ -120,7 +176,21 @@ Abrir la carpeta en Android Studio y esperar el *Gradle Sync*.
 > Por ejemplo, `.../Integración de Sistemas/...` no funciona; hay que renombrar la
 > carpeta a `Integracion`.
 
-Luego, en el celular:
+### Elegir la variante
+
+En Android Studio: **View → Tool Windows → Build Variants**, y elegir
+`alumnoDebug` o `docenteDebug` antes de pulsar **Run ▶**.
+
+Desde la línea de comandos:
+
+```bash
+./gradlew installAlumnoDebug     # instala VIGÍA Alumno
+./gradlew installDocenteDebug    # instala VIGÍA Docente
+```
+
+Los dos APK pueden convivir en el mismo equipo.
+
+### Preparar el celular
 
 1. Ajustes → Acerca del teléfono → tocar 7 veces **Número de compilación**
    (en Xiaomi/HyperOS: **Versión del sistema operativo**)
@@ -131,44 +201,65 @@ Luego, en el celular:
 
 ### Instalar en un segundo equipo
 
-**Build → Build Bundle(s) / APK(s) → Build APK(s)**. El archivo queda en
-`app/build/outputs/apk/debug/app-debug.apk` y se puede compartir e instalar
-directamente, sin Android Studio.
+**Build → Build Bundle(s) / APK(s) → Build APK(s)**. Los archivos quedan en
+`app/build/outputs/apk/alumno/debug/` y `app/build/outputs/apk/docente/debug/`, y se
+pueden compartir e instalar directamente, sin Android Studio.
 
-> ⚠️ **Los dos equipos deben tener la misma versión de la app.** El paquete BLE va
-> por la versión 4 y los anuncios de versiones anteriores se descartan. Un APK viejo
-> en uno de los equipos hace que el otro no lo vea, sin ningún mensaje de error.
+> ⚠️ **Todos los equipos deben tener la misma versión de la app.** El paquete BLE va
+> por la **versión 6** y los anuncios de versiones anteriores se descartan. Un APK
+> viejo en uno de los equipos hace que el otro no lo vea, sin ningún mensaje de error.
 
 ---
 
-## Cómo se usa
-
-La app abre en una pantalla de inicio donde se elige el rol.
+## El ciclo del examen
 
 ```
-                 VIGÍA UNI
-        ┌────────────┴────────────┐
-    Soy alumno              Soy docente
-        │                        │
-  nombre + código            código de aula
-        │                        │
-     Unirme                 Abrir panel
-        │                        │
- Pantalla del alumno      Panel del docente
+   DOCENTE                                ALUMNO
+   ───────                                ──────
+1. Abrir aula (código + PIN)
+        │  baliza BLE: aula N abierta
+        ▼
+2. Dictar el código al salón   ────────►  3. Escribir código UNI + aula
+                                                   │
+                                          4. Unirme (solo si escucha el aula)
+                                                   │
+5. Pasar lista ◄──────── anuncios cada 1 s ────────┘
+   (cierra el padrón)
+        │
+6. Vigilar: incidencias, bitácora, cotejo con la matrícula
+        │
+7. Finalizar examen
+        │  baliza de cierre
+        ▼
+8. Exportar la bitácora        ────────►  Los alumnos salen en ~8 s
 ```
 
-**1. El docente abre el aula.** *Soy docente* → escribe un código (por ejemplo `204`)
-→ **Abrir panel**. Su equipo empieza a anunciar que esa aula está abierta.
+**1. El docente abre el aula.** Escribe un código de aula (0–255, por ejemplo `204`)
+y un **PIN de cuatro dígitos** que él mismo define para ese examen. Pulsa
+**Abrir panel**; su equipo empieza a anunciar que esa aula está abierta.
 
-**2. Dicta el código** al salón.
+Si ese código ya está en el aire, la app lo rechaza: dos paneles con la misma aula
+mezclarían a los alumnos de los dos salones en ambas listas.
 
-**3. Cada alumno se une.** *Soy alumno* → su nombre → el código → **Unirme**.
+**2. Dicta el código de aula** al salón. **El PIN no se dicta.**
 
-El botón *Unirme* permanece bloqueado hasta que la app **escucha** el aula. Un aula
-solo existe mientras el equipo del docente la está anunciando: no hay servidor donde
+**3. Cada alumno se une.** Escribe su **código UNI** (8 dígitos y una letra, por
+ejemplo `20192589B`) y el código de aula, y pulsa **Unirme**.
+
+El botón permanece bloqueado hasta que la app **escucha** el aula. Un aula solo
+existe mientras el equipo del docente la está anunciando: no hay servidor donde
 consultarla.
 
 **4. El panel lista a los alumnos** conforme se unen, ordenados por nivel de riesgo.
+
+**5. El docente pasa lista** cuando todos están conectados: cuenta las personas
+presentes en el salón y cuántas no traen equipo, y **cierra el padrón**. A partir de
+ahí, un equipo que aparezca y no estuviera en el padrón se marca como
+*"No estaba al pasar lista"*.
+
+**6. Finalizar.** El panel emite una baliza de cierre durante 12 s, deja de anunciar
+el aula y borra la sesión. Los alumnos ven *"El examen terminó"* y salen solos en
+unos 8 segundos, sin esperar a que caduque la baliza.
 
 ### Qué muestra el panel del docente
 
@@ -176,10 +267,11 @@ consultarla.
 
 | Elemento | Significado |
 |---|---|
-| Equipos conectados | Cuántos alumnos están transmitiendo ahora |
-| Incidencias | Total de veces que algún alumno entró en `ALERTA` |
-| Usando ahora | Cuántos están en `ALERTA` en este momento |
+| Alumnos conectados | Cuántos están transmitiendo ahora |
+| Incidencias registradas | Total de veces que algún alumno entró en `ALERTA` |
+| Estado por alumno | `Sin novedad` · `Se movió` · `Está usando el equipo` · `Sin señal` · `No estaba al pasar lista` |
 | Contador por alumno | Sus incidencias durante la sesión |
+| Pestaña **Bitácora** | Cada evento con su hora exacta |
 
 Una **incidencia** es una *entrada* en `ALERTA`, no cada anuncio recibido en ese
 estado. En modo `INTENSIVO` el equipo anuncia cada 200 ms: contando anuncios, agitar
@@ -187,7 +279,7 @@ el equipo diez segundos sumaría cincuenta puntos. Contando transiciones, es **1
 
 El conteo lo lleva el equipo del docente, no viaja en el paquete: así no depende de
 lo que el alumno decida anunciar. Se mantiene aunque el alumno salga del alcance y
-vuelva, y se reinicia al cerrar el panel.
+vuelva, y se borra al finalizar el examen.
 
 ---
 
@@ -230,10 +322,109 @@ También se activa solo cuando la batería baja del **15 %**.
 
 ### Sensado en segundo plano
 
-Con la app abierta aparece una notificación permanente **"VIGÍA activo"**. Minimizar
-la app (sin cerrarla), esperar dos minutos y volver: el modo y los valores siguieron
-actualizándose. Es el `MonitoringService`, un servicio en primer plano; sin él Android
-suspende la app y el sensado se detiene.
+Con la app abierta aparece una notificación permanente **"VIGÍA activo"**. Es el
+`MonitoringService`, un servicio en primer plano; sin él Android suspende la app y el
+sensado se detiene.
+
+---
+
+## Bloqueo por salir de la aplicación
+
+Si el alumno se va a otra aplicación durante el examen, su equipo queda **bloqueado**:
+la pantalla se cubre con el aviso *"SALISTE DEL EXAMEN"* y solo se libera escribiendo
+el **PIN del docente**.
+
+El bloqueo es **persistente**: sobrevive a cerrar la app, a reiniciarla e incluso a
+reiniciar el equipo. Se guarda junto a la huella del PIN del aula en la que ocurrió,
+y `MainActivity` lo comprueba **antes** de decidir qué pantalla mostrar, así que no
+hay forma de esquivarlo reabriendo la aplicación.
+
+### Apagar la pantalla NO es salir
+
+Esta distinción costó trabajo y es la que más se pregunta:
+
+```kotlin
+// MainViewModel
+if (!enPrimerPlano && powerManager.isInteractive) {
+    // la app perdió el foco PERO la pantalla sigue encendida → se fue a otra app
+    bloquear()
+}
+```
+
+Android entrega `onStop()` en los dos casos —irse a WhatsApp y pulsar el botón de
+encendido— así que `onStop()` por sí solo no distingue nada. La discriminación real
+es `PowerManager.isInteractive`: si la pantalla quedó **apagada**, el equipo no se
+está usando y no hay falta. Se espera además **700 ms** antes de decidir, para no
+confundir una transición momentánea del sistema con una salida deliberada.
+
+El estado viaja al panel en dos banderas del paquete BLE (`SALIO` y `BLOQUEO`), así
+que el docente ve quién salió y quién sigue bloqueado sin que el alumno se lo diga.
+
+### El PIN lo define el docente en cada examen
+
+No hay PIN fijo en el código. El docente escribe cuatro dígitos al abrir el panel, y
+lo que viaja en la baliza **no es el PIN sino una huella de 16 bits** amarrada al
+número de aula:
+
+```kotlin
+fun huellaPin(pin: String, sala: Int): Int {
+    var h = 7
+    for (c in pin) h = (h * 31 + c.code) and 0xFFFF
+    return (h * 31 + sala) and 0xFFFF
+}
+```
+
+Un alumno que capture el anuncio no puede leer los cuatro dígitos: tendría que
+probarlos todos. No es criptografía —son 10 000 combinaciones— pero cierra la lectura
+casual, que es el ataque real: alguien mirando por encima del hombro. Y como la
+huella depende del aula, un PIN capturado en un salón no sirve en otro.
+
+---
+
+## Padrón, matrícula y bitácora
+
+### Padrón — quién estaba al empezar
+
+El docente pulsa **Pasar lista** cuando todos se conectaron: la app le muestra cuántos
+equipos ve, él cuenta las personas del salón y cuántas no trajeron equipo, y cierra el
+padrón. Desde ese momento, un equipo nuevo que aparezca se marca como
+*"No estaba al pasar lista"* y queda registrado.
+
+Es lo que cierra el hueco de un alumno que se conecta tarde desde fuera del salón.
+
+### Matrícula — quién debía estar
+
+El docente puede pegar la lista de matriculados del curso (un código por línea, o
+separados por comas). La app los coteja con los códigos conectados y devuelve tres
+grupos:
+
+| Grupo | Significado |
+|---|---|
+| **Presentes** | Matriculados que están conectados |
+| **No conectados** | Matriculados que no aparecen: ausentes o sin equipo |
+| **No matriculados** | Códigos conectados que no están en la lista |
+
+> No hay integración con UniVirtual. Eso exigiría API institucional, credenciales y
+> red — exactamente lo que este proyecto decidió no usar. La lista se pega a mano.
+
+### Bitácora — qué pasó y cuándo
+
+Cada evento queda registrado con su hora exacta:
+
+| Evento | Cuándo se registra |
+|---|---|
+| `UNIDO` | El alumno se unió al aula |
+| `ALERTA` | Entró en `ALERTA` (movimiento sostenido) |
+| `SALIO_APP` | Se fue a otra aplicación |
+| `SIN_SENAL` | Dejó de emitir |
+| `REGRESO` | Volvió a emitir |
+| `NO_REGISTRADO` | Apareció sin estar en el padrón |
+
+Se exporta como CSV (`hora,codigo,evento`) desde el diálogo de finalización.
+**Hay que exportarla antes de finalizar: después se borra.**
+
+Sin bitácora, el sistema resolvería una discusión igual que la vigilancia a ojo — la
+palabra de uno contra la del otro. Con ella, hay una hora exacta que mirar.
 
 ---
 
@@ -252,26 +443,32 @@ Consecuencias prácticas:
 
 - No hace falta emparejar los equipos, ni WiFi, ni datos, ni internet
 - Alcance de unos 10 a 30 metros
-- Si un alumno apaga el equipo, simplemente deja de aparecer a los 15 segundos
+- Si un alumno apaga el equipo, deja de aparecer a los 15 segundos
 
-### Los dos tipos de anuncio
+También se descartó una arquitectura cliente-servidor: la red WiFi del aula no está
+bajo control del equipo, y un sistema de supervisión que depende de la red deja de
+funcionar justo cuando más se necesita.
 
-**Baliza del aula** — 3 bytes, la emite el equipo del docente mientras el panel está
-abierto. El anuncio se reintenta cuando la app vuelve al primer plano y cuando se
-conceden los permisos: Android puede detener el advertising por su cuenta —ahorro de
-energía, restricciones del fabricante— y sin ese reintento el aula desaparecería en
-silencio.
+### Los tres tipos de anuncio — formato v6
 
-```
-[0] versión del formato (4)
-[1] tipo = AULA_ABIERTA
-[2] código de aula
-```
-
-**Estado del alumno** — 11 bytes de cabecera más el nombre:
+**Baliza del aula** — 5 bytes. La emite el equipo del docente mientras el panel está
+abierto.
 
 ```
-[0]      versión del formato (4)
+[0]      versión del formato (6)
+[1]      tipo = AULA_ABIERTA
+[2]      código de aula
+[3] [4]  huella de 16 bits del PIN
+```
+
+El anuncio se reintenta cuando la app vuelve al primer plano y cuando se conceden los
+permisos: Android puede detener el advertising por su cuenta —ahorro de energía,
+restricciones del fabricante— y sin ese reintento el aula desaparecería en silencio.
+
+**Estado del alumno** — 11 bytes de cabecera más el código UNI:
+
+```
+[0]      versión del formato (6)
 [1]      tipo = ESTADO_ALUMNO
 [2]      código de aula
 [3] [4]  identificador del equipo
@@ -279,14 +476,24 @@ silencio.
 [6]      índice de movimiento (0..255)
 [7]      batería (%)
 [8]      modo de operación
-[9]      banderas: wifi, datos, pantalla
-[10]     largo del nombre en bytes
-[11..]   nombre en UTF-8
+[9]      banderas: wifi · datos · pantalla · salió de la app · bloqueado
+[10]     largo del código en bytes
+[11..]   código UNI en UTF-8
 ```
 
-El anuncio BLE admite **31 bytes en total**, por eso el nombre se limita a 10 y se
-recorta sin partir un carácter a la mitad — importante con tildes y ñ, que ocupan dos
-bytes.
+**Cierre del aula** — 3 bytes. La emite el panel al finalizar el examen, durante 12 s.
+
+```
+[0] versión (6)   [1] tipo = CIERRE   [2] código de aula
+```
+
+Sin este paquete, el alumno solo se enteraría cuando la baliza caduca: quince segundos
+de caducidad más la confirmación, casi medio minuto mirando una pantalla que no cambia.
+Con el aviso explícito **sale en unos 8 segundos**.
+
+El anuncio BLE admite **31 bytes en total**. El código UNI son 9 (8 dígitos y una
+letra), así que el paquete del alumno queda en 20 bytes — holgado. Esa restricción de
+31 bytes es la razón de diseñar un protocolo binario propio en vez de usar JSON.
 
 ### El intervalo de emisión también se adapta
 
@@ -303,19 +510,26 @@ repetirlo solo gasta batería.
 
 ### Código de aula
 
-Cada anuncio lleva un código de aula y el panel descarta los que no coinciden. Es lo
-que evita que dos salones vecinos usando la app se mezclen en la misma lista.
+Cada anuncio lleva un código de aula (0–255, un byte) y el panel descarta los que no
+coinciden. Es lo que evita que dos salones vecinos usando la app se mezclen en la misma
+lista. Lo define el docente al abrir el panel; el valor sugerido es **101**.
 
-Queda guardado en el equipo. El valor por defecto es **101**.
+> El código de aula es un separador operativo, no un control de seguridad. Lo que sí
+> protege el acceso es el **PIN por examen**, que no se dicta y viaja como huella.
 
-> Es un separador operativo, no un control de seguridad: un alumno con acceso al
-> código podría cambiarlo, y el nombre lo escribe él mismo. En un despliegue real el
-> código lo emitiría la app del docente al iniciar la sesión y las identidades se
-> validarían contra la matrícula del curso.
+### Sesión del examen
+
+El estado del aula (alumnos vistos, incidencias, padrón) vive en `SesionExamen`,
+**fuera del flujo de escaneo**, porque ese flujo se recrea cada vez que la app vuelve
+al primer plano. Si el estado viviera dentro, minimizar el panel un segundo borraría
+la lista de alumnos.
+
+La sesión se limpia sola al cambiar de aula o al cumplir **4 horas** sin movimiento,
+para que un panel reabierto al día siguiente no arrastre los datos del examen anterior.
 
 ---
 
-## Permisos
+## Permisos y privacidad
 
 | Permiso | Para qué | Cuándo se solicita |
 |---|---|---|
@@ -330,27 +544,34 @@ la app declara explícitamente que no usa el Bluetooth para deducir dónde está
 alumno.
 
 Si los permisos se conceden después de abrir la app, el escaneo y el anuncio se
-reinician solos: la app los rehace al volver del diálogo y cada vez que se vuelve a
-primer plano.
+reinician solos.
 
-### Privacidad
+### Qué NO hace
 
-VIGÍA no captura pantalla, audio, ubicación GPS ni contenido de aplicaciones. Procesa
-únicamente metadatos derivados de sensores del propio dispositivo, y muestra en todo
-momento su modo de operación y el motivo de cada cambio.
+VIGÍA **no** captura pantalla, audio, ubicación GPS ni contenido de aplicaciones, y
+**no** consume los datos móviles del alumno. Procesa únicamente metadatos derivados de
+sensores del propio dispositivo, y muestra en todo momento su modo de operación y el
+motivo de cada cambio.
 
 Lo único que sale del equipo son los bytes descritos arriba: un identificador derivado
-del dispositivo (no de la persona), el nombre que el propio alumno escribió, el código
-de aula, el nivel de riesgo, el índice de movimiento, la batería, el modo y tres
-banderas de conectividad.
+del dispositivo (no de la persona), el código UNI que el propio alumno escribió, el
+código de aula, el nivel de riesgo, el índice de movimiento, la batería, el modo y las
+cinco banderas de estado.
 
-El alumno decide cuándo entra y cuándo sale: la app **no anuncia nada** hasta que pulsa
-*Unirme*, y *Salir* corta la emisión de inmediato. El equipo del docente solo escucha,
+El alumno decide cuándo entra: la app **no anuncia nada** hasta que pulsa *Unirme*.
+Una vez dentro del examen no hay botón de salida — el examen lo cierra el docente, o
+el alumno queda bloqueado si se va por su cuenta. El equipo del docente solo escucha,
 nunca anuncia su estado.
+
+Los datos viven en el equipo del docente **durante la sesión** y se borran al
+finalizar el examen.
 
 ---
 
 ## Arquitectura
+
+Arquitectura **MVVM en capas**, con un único `MainViewModel` como orquestador. La capa
+de transporte es paralela al pipeline y no lo condiciona.
 
 ```
 sensing/      →   processing/   →   decision/     →   adaptation/ + ui/
@@ -365,13 +586,14 @@ CONTEXTO          PROCESAMIENTO     DECISIÓN          ADAPTACIÓN
 | Decisión | `decision/AdaptationEngine.kt`, `decision/AdaptationRules.kt`, `decision/RiskEvaluator.kt` |
 | Adaptación | `adaptation/SamplingPolicy.kt`, `ui/StudentScreen.kt` |
 | Transporte | `transport/PacketCodec.kt`, `BleAdvertiser.kt`, `BleScanner.kt`, `EquipoStore.kt` |
+| Ciclo del examen | `transport/SesionExamen.kt`, `PadronStore.kt`, `MatriculaStore.kt`, `Bitacora.kt`, `BloqueoStore.kt` |
 | Interfaz | `ui/HomeScreen.kt`, `ui/StudentScreen.kt`, `ui/TeacherScreen.kt`, `ui/Paleta.kt` |
 | Orquestación | `MainViewModel.kt`, `MainActivity.kt` |
 | Modelo de datos | `model/Model.kt` |
 | Robustez | `MonitoringService.kt` |
 
-**Tecnologías:** Kotlin · Jetpack Compose · Coroutines/Flow · SensorManager ·
-BLE Advertising
+**Tecnologías:** Kotlin 2.2.10 · Jetpack Compose (BOM 2026.02.01, Material 3) ·
+Coroutines/Flow · SensorManager · BLE Advertising · Gradle 9.3.2 con product flavors
 
 ### Notas de diseño
 
@@ -379,13 +601,30 @@ BLE Advertising
 operación ni un nivel de riesgo: solo importan `android.*` y `kotlinx.coroutines.*`.
 Esa es la separación que el taller califica.
 
+**La adaptación real son dos líneas.** Android no permite cambiar la frecuencia de un
+sensor ya registrado, así que hay que des-registrar el listener y volver a registrarlo:
+
+```kotlin
+fun changeDelay(nuevo: Int) {
+    if (running) { stop(); start() }   // esto ES la adaptación en caliente
+}
+```
+
 **El estado de navegación vive en el `MainViewModel`.** Al girar el equipo Android
 destruye y recrea la Activity; si la pantalla activa viviera en un `remember`, el
 usuario saldría del examen al rotar el celular.
 
+**El bloqueo se comprueba en `MainActivity`, antes de navegar.** Si se comprobara
+dentro de la pantalla del alumno, cerrar y reabrir la app dejaría al alumno en la
+pantalla de inicio con el bloqueo activo pero invisible.
+
 **El modo `DESCONECTADO` no se activa al fallar el anuncio.** Tiene prioridad sobre
 todos los demás modos, así que un fallo puntual del Bluetooth dejaría la app clavada
 ahí y ocultaría A1 y A2 por completo. El estado de la transmisión se muestra aparte.
+
+**La pantalla del alumno mantiene el equipo despierto** (`FLAG_KEEP_SCREEN_ON`):
+Android limita el escaneo BLE con la pantalla apagada y el panel dejaría de ver a ese
+alumno.
 
 ---
 
@@ -418,13 +657,31 @@ bajar `NORMALIZATION_CEILING`.
 
 **El alumno no ve el aula.**
 El docente debe abrir el panel **primero**: un aula solo existe mientras se está
-anunciando. Revisar además que ambos equipos tengan la misma versión del APK, el
-Bluetooth encendido y los permisos concedidos.
+anunciando. Revisar además que ambos equipos tengan la misma versión del APK
+(protocolo v6), el Bluetooth encendido y los permisos concedidos.
+
+**Instalé la app pero no aparece la pantalla del docente.**
+Está instalada la variante `alumno`. El rol lo fija el APK: hay que compilar
+`docenteDebug`. En el equipo se llaman **VIGÍA Alumno** y **VIGÍA Docente**.
 
 **El panel dice "El aula no se está anunciando".**
 El mensaje incluye el motivo. Si dice *"este equipo no puede emitir por Bluetooth"*,
 ese celular no tiene modo periférico BLE: intercambiar los roles y usar el otro como
 docente.
+
+**"El aula ya está abierta en otro equipo".**
+Otro panel está anunciando ese mismo código. Usar otro número, o cerrar el otro panel
+y esperar unos segundos a que caduque su baliza.
+
+**El equipo de un alumno quedó bloqueado y no recuerdo el PIN.**
+El PIN se muestra en la cabecera del panel del docente, junto al número de aula. Si se
+cerró el panel, hay que reabrirlo con **el mismo código de aula y el mismo PIN**: la
+huella tiene que coincidir.
+
+**Se bloqueó solo al apagar la pantalla.**
+No debería: apagar la pantalla no cuenta como salir. Si ocurre, el equipo está
+entregando `onStop()` con la pantalla aún interactiva — revisar
+`MainViewModel.appVisible()`.
 
 **El alumno estaba conectado y de pronto desapareció del panel.**
 Revisar la batería del equipo del docente. Por debajo del 15 % muchos fabricantes
@@ -442,12 +699,17 @@ carga.
 **Gradle falla con `non-ASCII characters`.**
 La ruta del proyecto tiene tildes o ñ. Renombrar las carpetas.
 
+**Gradle falla con `Product Flavor contains custom resource values, but the feature is disabled`.**
+Falta `resValues = true` en el bloque `buildFeatures` de `app/build.gradle.kts`.
+
 ---
 
 ## Integrantes
 
-| Integrante | Módulos |
+| Integrante | Responsabilidad principal |
 |---|---|
-| **Cesar Alonso Dionicio Achachagua** | `sensing/` — captura de contexto · `MonitoringService` |
-| **Ernesto Ramon Salazar Ramos** | `processing/` y `decision/` — procesamiento y decisión |
-| **Giancarlo Aguirre Alvarado** | `adaptation/` y `ui/` — política de muestreo e interfaz |
+| **Cesar Alonso Dionicio Achachagua** | `sensing/` y transporte BLE · bloqueo por salir de la app · ciclo del examen · `MonitoringService` |
+| **Ernesto Ramon Salazar Ramos** | `processing/` y `decision/` · bitácora de eventos · padrón del examen |
+| **Giancarlo Aguirre Alvarado** | `adaptation/` y `ui/` · política de muestreo · cotejo con la matrícula |
+
+**Docente:** Ramos Montes Carlos Nelson
