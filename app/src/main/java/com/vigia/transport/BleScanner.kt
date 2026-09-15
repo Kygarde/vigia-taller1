@@ -35,18 +35,34 @@ class BleScanner(context: Context) {
      * El alumno solo puede unirse a un aula que aparezca en este conjunto.
      */
     @SuppressLint("MissingPermission")
-    fun aulasAbiertas() = callbackFlow<Set<Int>> {
+    fun aulasAbiertas() = callbackFlow<Map<Int, Int>> {
 
         val vistas = linkedMapOf<Int, Long>()          // sala -> ultimo anuncio
-        fun emitir() = trySend(vistas.keys.toSet())
+        val huellas = mutableMapOf<Int, Int>()         // sala -> huella de su PIN
+        val cerradas = mutableSetOf<Int>()             // aulas que avisaron su cierre
+        fun emitir() = trySend(vistas.keys.associateWith { huellas[it] ?: -1 })
 
         val callback = object : ScanCallback() {
             override fun onScanResult(type: Int, result: ScanResult) {
                 val crudo = result.scanRecord
                     ?.getManufacturerSpecificData(PacketCodec.MANUFACTURER_ID) ?: return
-                if (!PacketCodec.esAulaAbierta(crudo)) return
                 val sala = PacketCodec.salaDe(crudo) ?: return
+
+                // El docente avisa que cerro: el aula desaparece en el acto, sin
+                // esperar los quince segundos de caducidad.
+                if (PacketCodec.esCierreDeAula(crudo)) {
+                    if (vistas.remove(sala) != null) {
+                        huellas.remove(sala)
+                        cerradas.add(sala)
+                        emitir()
+                    }
+                    return
+                }
+
+                if (!PacketCodec.esAulaAbierta(crudo)) return
                 vistas[sala] = System.currentTimeMillis()
+                cerradas.remove(sala)
+                PacketCodec.huellaDeAula(crudo)?.let { huellas[sala] = it }
                 emitir()
             }
 
@@ -63,7 +79,9 @@ class BleScanner(context: Context) {
                 delay(2_000)
                 val corte = System.currentTimeMillis() - CADUCIDAD_MS
                 if (vistas.values.any { it < corte }) {
+                    val caducadas = vistas.filterValues { it < corte }.keys
                     vistas.entries.removeAll { it.value < corte }
+                    huellas.keys.removeAll(caducadas)
                     emitir()
                 }
             }

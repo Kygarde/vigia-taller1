@@ -10,7 +10,7 @@ import com.vigia.model.*
  *   [1] tipo de paquete
  *   [2] codigo de aula
  *
- * AULA_ABIERTA (3 bytes) lo emite el equipo del docente mientras el panel esta
+ * AULA_ABIERTA (5 bytes) lo emite el equipo del docente mientras el panel esta
  * abierto. Es lo que permite al alumno saber que el aula existe antes de unirse:
  * sin servidor, un aula solo "existe" mientras alguien la esta anunciando.
  *
@@ -30,10 +30,11 @@ import com.vigia.model.*
 object PacketCodec {
 
     const val MANUFACTURER_ID = 0x0BDA
-    const val VERSION: Byte = 5              // era 4
+    const val VERSION: Byte = 6              // 5 -> 6: la baliza lleva el PIN
 
     const val TIPO_AULA: Byte = 1
     const val TIPO_ALUMNO: Byte = 2
+    const val TIPO_CIERRE: Byte = 3
 
     private const val CABECERA_ALUMNO = 11
 
@@ -44,8 +45,47 @@ object PacketCodec {
     private const val F_SALIO    = 0b01000   // NUEVO
     private const val F_BLOQUEO  = 0b10000   // NUEVO
 
-    fun encodeAula(sala: Int): ByteArray =
-        byteArrayOf(VERSION, TIPO_AULA, sala.toByte())
+    /**
+     * Baliza del docente: "el aula N esta abierta, y su PIN tiene esta huella".
+     *
+     *   [0] version  [1] tipo  [2] sala  [3][4] huella del PIN
+     *
+     * Viaja la huella y no el PIN. Un alumno que capturara el anuncio no puede leer
+     * los cuatro digitos directamente; tendria que probarlos todos. No es criptografia
+     * —son 10 000 combinaciones— pero cierra la lectura casual, que es el ataque real:
+     * alguien mirando por encima del hombro o un anuncio a la vista.
+     */
+    fun encodeAula(sala: Int, huellaPin: Int): ByteArray =
+        byteArrayOf(
+            VERSION, TIPO_AULA, sala.toByte(),
+            (huellaPin shr 8).toByte(), huellaPin.toByte()
+        )
+
+    /** Huella de 16 bits del PIN, amarrada al aula para que no sirva en otro salon. */
+    fun huellaPin(pin: String, sala: Int): Int {
+        var h = 7
+        for (c in pin) h = (h * 31 + c.code) and 0xFFFF
+        return (h * 31 + sala) and 0xFFFF
+    }
+
+    /**
+     * "El examen del aula N termino."
+     *
+     * Sin esto, el alumno solo se entera cuando la baliza caduca: quince segundos de
+     * caducidad mas la confirmacion, casi medio minuto mirando una pantalla que no
+     * cambia. Con el aviso explicito sale en el acto.
+     */
+    fun encodeCierre(sala: Int): ByteArray =
+        byteArrayOf(VERSION, TIPO_CIERRE, sala.toByte())
+
+    fun esCierreDeAula(b: ByteArray): Boolean =
+        b.size >= 3 && b[0] == VERSION && b[1] == TIPO_CIERRE
+
+    /** Huella que declara una baliza de aula, o null si el anuncio no la trae. */
+    fun huellaDeAula(b: ByteArray): Int? {
+        if (!esAulaAbierta(b) || b.size < 5) return null
+        return ((b[3].toInt() and 0xFF) shl 8) or (b[4].toInt() and 0xFF)
+    }
 
     fun encodeAlumno(
         id: Int,
