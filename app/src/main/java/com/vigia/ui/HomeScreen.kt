@@ -104,20 +104,24 @@ private fun BotonSecundario(texto: String, onClick: () -> Unit) {
 fun HomeScreen(
     codigoGuardado: String,
     salaGuardada: Int,
-    aulasAbiertas: Set<Int>,
+    /** Aulas anunciadas ahora mismo: codigo de aula -> huella de su PIN. */
+    aulasAbiertas: Map<Int, Int>,
     /** Aula que este mismo equipo anuncio hace poco. null si ninguna. */
     miAula: Int?,
+    /** El docente cerro el aula y al alumno se le termino el examen. */
+    examenTerminado: Boolean = false,
     bluetoothListo: Boolean,
     permisosOk: Boolean,
     onPedirPermisos: () -> Unit,
-    onEntrarComoAlumno: (String, Int) -> Unit,
-    onEntrarComoDocente: (Int) -> Unit
+    onEntrarComoAlumno: (String, Int, Int) -> Unit,
+    onEntrarComoDocente: (Int, String) -> Unit
 ) {
     // El rol NO se elige: lo fija la variante instalada. El alumno no puede
     // entrar al panel del docente porque ese camino no existe en su APK.
     val rol = if (BuildConfig.ES_DOCENTE) Rol.DOCENTE else Rol.ALUMNO
     var codigo by rememberSaveable { mutableStateOf(codigoGuardado) }
     var sala by rememberSaveable { mutableStateOf(salaGuardada.toString()) }
+    var pin by rememberSaveable { mutableStateOf("") }
 
     val valorSala = sala.toIntOrNull()
     val salaValida = valorSala != null &&
@@ -168,6 +172,11 @@ fun HomeScreen(
                     error = salaValida && !aulaExiste
                 )
 
+                if (examenTerminado) {
+                    Spacer(Modifier.height(10.dp))
+                    Aviso("El examen terminó. El docente cerró el aula.", ok = true)
+                }
+
                 Spacer(Modifier.height(10.dp))
                 Aviso(
                     when {
@@ -189,7 +198,9 @@ fun HomeScreen(
 
                 Spacer(Modifier.height(18.dp))
                 BotonPrincipal("Unirme", aulaExiste && EquipoStore.codigoValido(codigo)) {
-                    valorSala?.let { onEntrarComoAlumno(codigo.trim(), it) }
+                    valorSala?.let {
+                        onEntrarComoAlumno(codigo.trim(), it, aulasAbiertas[it] ?: -1)
+                    }
                 }
             }
 
@@ -230,9 +241,25 @@ fun HomeScreen(
                     else -> Aviso("Escribe un código entre 0 y 255", ok = false)
                 }
 
+                Spacer(Modifier.height(12.dp))
+                Campo(
+                    pin, { pin = it.filter { c -> c.isDigit() }.take(4) },
+                    "PIN para desbloquear equipos", numerico = true,
+                    error = pin.isNotEmpty() && pin.length < 4
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Cuatro dígitos. Lo necesitarás para reabrir el equipo de un alumno " +
+                        "que se salga de la aplicación. No lo dictes al salón.",
+                    fontSize = 12.sp, color = Paleta.Plomo, textAlign = TextAlign.Center
+                )
+
                 Spacer(Modifier.height(24.dp))
-                BotonPrincipal("Abrir panel", salaValida && !aulaOcupada) {
-                    valorSala?.let(onEntrarComoDocente)
+                BotonPrincipal(
+                    "Abrir panel",
+                    salaValida && !aulaOcupada && pin.length == 4
+                ) {
+                    valorSala?.let { onEntrarComoDocente(it, pin) }
                 }
             }
         }

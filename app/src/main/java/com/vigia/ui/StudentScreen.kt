@@ -34,21 +34,21 @@ import com.vigia.model.*
 // ---------- Traducciones de los valores crudos a lenguaje legible ----------
 
 private fun textoMovimiento(indice: Float): String = when {
-    indice >= AdaptationRules.MOVEMENT_ALERTA -> "Equipo siendo manipulado"
-    indice >= AdaptationRules.MOVEMENT_ATENCION -> "Movimiento leve detectado"
+    indice >= AdaptationRules.MOVEMENT_ALERTA -> "Estás moviendo el equipo"
+    indice >= AdaptationRules.MOVEMENT_ATENCION -> "Se detectó un movimiento leve"
     else -> "Equipo en reposo"
 }
 
 /** Que debe hacer el alumno segun lo que se esta detectando. */
 private fun indicacion(riesgo: RiskLevel): String = when (riesgo) {
-    RiskLevel.NORMAL -> "Todo en orden. Manten el equipo sobre la mesa."
-    RiskLevel.ATENCION -> "Se registro movimiento. Evita manipular el equipo."
-    RiskLevel.ALERTA -> "Movimiento sostenido registrado. Deja el equipo sobre la mesa."
+    RiskLevel.NORMAL -> "Todo en orden. Deja el equipo sobre la mesa."
+    RiskLevel.ATENCION -> "Se registró movimiento. Evita tocar el equipo."
+    RiskLevel.ALERTA -> "Movimiento sostenido: el docente lo está viendo. Suelta el equipo."
 }
 
 private fun textoRiesgo(riesgo: RiskLevel): String = when (riesgo) {
     RiskLevel.NORMAL -> "Sin novedad"
-    RiskLevel.ATENCION -> "Requiere atencion"
+    RiskLevel.ATENCION -> "Requiere atención"
     RiskLevel.ALERTA -> "Movimiento sostenido"
 }
 
@@ -59,10 +59,10 @@ private fun colorRiesgo(riesgo: RiskLevel): Color = when (riesgo) {
 }
 
 private fun textoModo(modo: OperatingMode): String = when (modo) {
-    OperatingMode.NORMAL -> "Vigilancia estandar"
+    OperatingMode.NORMAL -> "Vigilancia normal"
     OperatingMode.INTENSIVO -> "Vigilancia reforzada"
     OperatingMode.AHORRO -> "Consumo reducido"
-    OperatingMode.DESCONECTADO -> "Sin enlace, guardando local"
+    OperatingMode.DESCONECTADO -> "Sin enlace con el docente"
 }
 
 private fun onOff(activo: Boolean): String = if (activo) "ON" else "OFF"
@@ -89,8 +89,7 @@ fun StudentScreen(
     idAlumno: Int,
     emitiendo: Boolean,
     sala: Int,
-    codigo: String,
-    onSalir: () -> Unit
+    codigo: String
 ) {
     val color = when (decision.mode) {
         OperatingMode.NORMAL -> Color(0xFF2E7D32)
@@ -113,32 +112,21 @@ fun StudentScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Image(
-                    painter = painterResource(R.drawable.escudo_uni),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(26.dp)
+            Column {
+                Text(
+                    "Examen en curso", color = Color.White,
+                    fontSize = 14.sp, fontWeight = FontWeight.Bold
                 )
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Text(
-                        "VIGÍA UNI", color = Color.White,
-                        fontSize = 13.sp, fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "examen en curso", color = Paleta.SobreGuinda, fontSize = 11.sp
-                    )
-                }
+                Text(
+                    "Deja el equipo sobre la mesa",
+                    color = Paleta.SobreGuinda, fontSize = 11.sp
+                )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "$codigo · aula $sala",
                     color = Paleta.SobreGuinda, fontSize = 12.sp
                 )
-                TextButton(onClick = onSalir) {
-                    Text("Salir", color = Color(0xCCE8D5DA), fontSize = 12.sp)
-                }
             }
         }
 
@@ -213,11 +201,11 @@ fun StudentScreen(
                 "Bateria",
                 "${ctx.batteryLevel}%" + if (ctx.batterySaver) "  ·  ahorro activo" else ""
             )
-            Fila("WiFi", onOff(ctx.wifiEnabled), colorOnOff(ctx.wifiEnabled))
-            Fila("Datos moviles", onOff(ctx.mobileDataEnabled), colorOnOff(ctx.mobileDataEnabled))
+            Fila("Wi-Fi", onOff(ctx.wifiEnabled), colorOnOff(ctx.wifiEnabled))
+            Fila("Datos móviles", onOff(ctx.mobileDataEnabled), colorOnOff(ctx.mobileDataEnabled))
             Fila("Pantalla", if (ctx.screenOn) "encendida" else "apagada")
-            Fila("Este equipo", if (codigo.isNotBlank()) codigo else "sin codigo · $idAlumno")
-            Fila("Transmision al docente", onOff(emitiendo), colorOnOff(emitiendo))
+            Fila("Tu código", if (codigo.isNotBlank()) codigo else "sin código · equipo $idAlumno")
+            Fila("Reportando al docente", onOff(emitiendo), colorOnOff(emitiendo))
 
             Spacer(Modifier.height(18.dp))
 

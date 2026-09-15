@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -41,6 +42,7 @@ import com.vigia.model.RiskLevel
 import com.vigia.transport.AlumnoVigilado
 import com.vigia.transport.EstadoAnuncio
 import com.vigia.transport.PadronStore
+import com.vigia.transport.SesionExamen
 
 private fun colorRiesgo(riesgo: RiskLevel, enPadron: Boolean, ausente: Boolean): Color = when {
     !enPadron -> Paleta.PlomoClaro
@@ -51,16 +53,16 @@ private fun colorRiesgo(riesgo: RiskLevel, enPadron: Boolean, ausente: Boolean):
 }
 
 private fun textoRiesgo(riesgo: RiskLevel, enPadron: Boolean, ausente: Boolean): String = when {
-    !enPadron -> "NO REGISTRADO EN PADRÓN"
-    ausente -> "Sin señal (ausente)"
-    riesgo == RiskLevel.ALERTA -> "Usando el equipo"
-    riesgo == RiskLevel.ATENCION -> "Requiere atención"
+    !enPadron -> "No estaba al pasar lista"
+    ausente -> "Sin señal"
+    riesgo == RiskLevel.ALERTA -> "Está usando el equipo"
+    riesgo == RiskLevel.ATENCION -> "Se movió"
     else -> "Sin novedad"
 }
 
 private fun textoModo(modo: OperatingMode): String = when (modo) {
-    OperatingMode.NORMAL -> "vigilancia estándar"
-    OperatingMode.INTENSIVO -> "vigilancia reinforced"
+    OperatingMode.NORMAL -> "vigilancia normal"
+    OperatingMode.INTENSIVO -> "vigilancia reforzada"
     OperatingMode.AHORRO -> "consumo reducido"
     OperatingMode.DESCONECTADO -> "sin enlace"
 }
@@ -127,7 +129,7 @@ private fun FilaAlumno(a: AlumnoVigilado) {
             Text(
                 buildString {
                     append("movimiento %.2f  ·  batería %d%%".format(e.movement, e.battery))
-                    if (!e.screenOn) append("  ·  pantalla off")
+                    if (!e.screenOn) append("  ·  pantalla apagada")
                     if (e.salioDeLaApp) append("  ·  FUERA APP")
                     a.ausenteDesde?.let { t ->
                         val segs = (System.currentTimeMillis() - t) / 1000
@@ -150,9 +152,11 @@ fun TeacherScreen(
     permisosOk: Boolean,
     estadoAnuncio: EstadoAnuncio,
     sala: Int,
+    /** PIN que el docente eligio para este examen. Se muestra solo en su panel. */
+    pinAula: String,
     otrasAulas: Set<Int>,
     onPedirPermisos: () -> Unit,
-    onVolver: () -> Unit
+    onFinalizar: () -> Unit
 ) {
     val enAlerta = alumnos.count { it.estado.risk == RiskLevel.ALERTA }
     val totalIncidencias = alumnos.sumOf { it.incidencias }
@@ -161,6 +165,56 @@ fun TeacherScreen(
     // Lo que si se ve es que haya otro examen anunciandose cerca, que es cuando
     // conviene revisar que los codigos no se pisen.
     val hayOtroPanel = otrasAulas.isNotEmpty()
+
+    var mostrarCierre by rememberSaveable { mutableStateOf(false) }
+    val contextoCierre = LocalContext.current
+
+    if (mostrarCierre) {
+        val (equipos, incidencias, eventos) = SesionExamen.resumen()
+        AlertDialog(
+            onDismissRequest = { mostrarCierre = false },
+            title = { Text("Finalizar el examen del aula $sala") },
+            text = {
+                Column {
+                    Text(
+                        "$equipos equipos · $incidencias incidencias · $eventos eventos",
+                        fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Paleta.Tinta
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Al finalizar se deja de anunciar el aula y se borra la sesión. " +
+                            "Los alumnos saldrán solos cuando dejen de ver la baliza.",
+                        fontSize = 13.sp, color = Paleta.Plomo
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Button(
+                        onClick = { exportarBitacora(contextoCierre, sala) },
+                        enabled = eventos > 0,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Paleta.Guinda, contentColor = Paleta.Blanco
+                        )
+                    ) { Text("Exportar la bitácora") }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Expórtala antes de finalizar: después se borra.",
+                        fontSize = 12.sp, color = Paleta.Guinda
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { mostrarCierre = false; onFinalizar() }) {
+                    Text("Finalizar y cerrar aula", color = Paleta.Guinda,
+                        fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { mostrarCierre = false }) {
+                    Text("Seguir vigilando", color = Paleta.Plomo)
+                }
+            },
+            containerColor = Paleta.Blanco
+        )
+    }
 
     Column(Modifier.fillMaxSize().navigationBarsPadding()) {
 
@@ -171,27 +225,21 @@ fun TeacherScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Image(
-                    painter = painterResource(R.drawable.escudo_uni),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(26.dp)
+            Column {
+                Text(
+                    "Aula $sala", color = Paleta.Blanco,
+                    fontSize = 15.sp, fontWeight = FontWeight.Bold
                 )
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Text(
-                        "VIGÍA UNI", color = Paleta.Blanco,
-                        fontSize = 13.sp, fontWeight = FontWeight.Bold
-                    )
-                    Text("panel del docente", color = Paleta.SobreGuinda, fontSize = 11.sp)
+                if (pinAula.isNotBlank()) {
+                    Text("PIN de desbloqueo · $pinAula",
+                        color = Paleta.SobreGuinda, fontSize = 11.sp)
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("aula $sala", color = Paleta.SobreGuinda, fontSize = 12.sp)
-                TextButton(onClick = onVolver) {
-                    Text("Salir", color = Color(0xCCE8D5DA), fontSize = 12.sp)
-                }
+            // Del panel solo se sale finalizando: un examen esta abierto o
+            // cerrado, no hay un estado intermedio de "panel minimizado".
+            TextButton(onClick = { mostrarCierre = true }) {
+                Text("Finalizar", color = Paleta.Blanco,
+                    fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -206,7 +254,7 @@ fun TeacherScreen(
                     fontSize = 48.sp, fontWeight = FontWeight.Bold, color = Paleta.Blanco
                 )
                 Text(
-                    if (alumnos.size == 1) "equipo conectado" else "equipos conectados",
+                    if (alumnos.size == 1) "alumno conectado" else "alumnos conectados",
                     fontSize = 14.sp, color = Paleta.SobreGuinda
                 )
             }
@@ -216,11 +264,11 @@ fun TeacherScreen(
                     fontSize = 48.sp, fontWeight = FontWeight.Bold,
                     color = if (totalIncidencias > 0) Color(0xFFFFCDD2) else Paleta.SobreGuinda
                 )
-                Text("incidencias", fontSize = 14.sp, color = Paleta.SobreGuinda)
+                Text("incidencias registradas", fontSize = 14.sp, color = Paleta.SobreGuinda)
                 if (enAlerta > 0) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "$enAlerta usando ahora",
+                        "$enAlerta usando el equipo ahora",
                         fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFCDD2)
                     )
                 }
@@ -245,16 +293,7 @@ fun TeacherScreen(
         }
 
         if (pestana == 1) Column(Modifier.weight(1f)) {
-            PanelBitacora(lineas) {
-                val envio = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Bitácora VIGÍA — aula $sala")
-                    putExtra(android.content.Intent.EXTRA_TEXT, Bitacora.csv())
-                }
-                contexto.startActivity(
-                    android.content.Intent.createChooser(envio, "Exportar bitácora")
-                )
-            }
+            PanelBitacora(lineas) { exportarBitacora(contexto, sala) }
         } else Column(Modifier.weight(1f).padding(horizontal = 22.dp, vertical = 14.dp)) {
             if (hayOtroPanel) {
                 Mensaje(
@@ -286,8 +325,8 @@ fun TeacherScreen(
                             "no pueden unirse."
                 )
                 alumnos.isEmpty() -> Mensaje(
-                    "Aula $sala abierta",
-                    "Dicta el código a los alumnos. Aparecerán aquí conforme se unan."
+                    "Aula $sala abierta y anunciándose",
+                    "Dicta el código $sala al salón. Los alumnos aparecerán aquí conforme se unan."
                 )
                 else -> LazyColumn {
                     items(alumnos, key = { it.estado.id }) { a ->
@@ -339,25 +378,44 @@ private fun BarraPadron(alumnos: List<AlumnoVigilado>) {
     var presentes by rememberSaveable { mutableStateOf("") }
     var sinEquipo by rememberSaveable { mutableStateOf("") }
 
+    val conectados = alumnos.count { !it.ausente }
+
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
             .background(Paleta.PlomoFondo).padding(14.dp)
     ) {
         if (!cerrado) {
+
             Text("Pasar lista", fontSize = 15.sp,
                 fontWeight = FontWeight.Bold, color = Paleta.Tinta)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Pide a todos que enciendan Bluetooth y se unan. Luego cierra la lista.",
-                fontSize = 12.sp, color = Paleta.Plomo
-            )
             Spacer(Modifier.height(10.dp))
+
+            // Lo que cuenta la app, separado de lo que cuenta el docente.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "$conectados",
+                    fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Paleta.Guinda
+                )
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(
+                        if (conectados == 1) "alumno conectado" else "alumnos conectados",
+                        fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Paleta.Tinta
+                    )
+                    Text("lo cuenta la app, en vivo",
+                        fontSize = 11.sp, color = Paleta.PlomoClaro)
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Text("Cuéntalos tú en el salón:", fontSize = 12.sp, color = Paleta.Plomo)
+            Spacer(Modifier.height(8.dp))
 
             Row {
                 OutlinedTextField(
                     value = presentes,
                     onValueChange = { presentes = it.filter { c -> c.isDigit() }.take(3) },
-                    label = { Text("Presentes") }, singleLine = true,
+                    label = { Text("Personas") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f)
                 )
@@ -365,21 +423,38 @@ private fun BarraPadron(alumnos: List<AlumnoVigilado>) {
                 OutlinedTextField(
                     value = sinEquipo,
                     onValueChange = { sinEquipo = it.filter { c -> c.isDigit() }.take(3) },
-                    label = { Text("Sin equipo") }, singleLine = true,
+                    label = { Text("Sin celular") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            Spacer(Modifier.height(6.dp))
-            Text("Conectados ahora: ${alumnos.size}", fontSize = 12.sp, color = Paleta.Plomo)
+            // La resta es el punto: quien esta en el salon y no aparece en la app.
+            val p = presentes.toIntOrNull()
+            if (p != null) {
+                val faltan = p - conectados - (sinEquipo.toIntOrNull() ?: 0)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    when {
+                        faltan > 0 -> "⚠ $faltan sin explicar: están en el salón, " +
+                            "no tienen el celular apagado y no aparecen en la lista"
+                        faltan < 0 -> "Hay más equipos conectados que personas contadas. " +
+                            "Revisa el conteo o el código de aula."
+                        else -> "Todo cuadra: $p personas = $conectados conectados + " +
+                            "${sinEquipo.toIntOrNull() ?: 0} sin celular"
+                    },
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (faltan == 0) Paleta.Normal else Paleta.Intensivo
+                )
+            }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             Button(
                 onClick = {
                     PadronStore.cerrar(
                         alumnos.map { it.estado.id }.toSet(),
-                        presentes.toIntOrNull() ?: alumnos.size,
+                        presentes.toIntOrNull() ?: conectados,
                         sinEquipo.toIntOrNull() ?: 0
                     )
                     cerrado = true
@@ -398,12 +473,12 @@ private fun BarraPadron(alumnos: List<AlumnoVigilado>) {
             ) {
                 Column {
                     Text(
-                        "Lista cerrada · ${PadronStore.tamano} equipos",
+                        "Lista cerrada · ${PadronStore.tamano} equipos registrados",
                         fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Paleta.Tinta
                     )
                     if (PadronStore.sinEquipo > 0) {
                         Text(
-                            "${PadronStore.sinEquipo} sin equipo — ubicados adelante",
+                            "${PadronStore.sinEquipo} sin celular — ubicados adelante",
                             fontSize = 12.sp, color = Paleta.Guinda,
                             fontWeight = FontWeight.Bold
                         )
@@ -411,10 +486,8 @@ private fun BarraPadron(alumnos: List<AlumnoVigilado>) {
                     val faltan = PadronStore.presentes - PadronStore.tamano -
                         PadronStore.sinEquipo
                     if (faltan > 0) {
-                        Text(
-                            "⚠ $faltan presentes sin explicar",
-                            fontSize = 12.sp, color = Paleta.Intensivo
-                        )
+                        Text("⚠ $faltan personas sin explicar",
+                            fontSize = 12.sp, color = Paleta.Intensivo)
                     }
                 }
                 TextButton(onClick = { PadronStore.reabrir(); cerrado = false }) {
@@ -441,7 +514,7 @@ private fun PanelBitacora(lineas: List<Bitacora.Linea>, onExportar: () -> Unit) 
         if (lineas.isEmpty()) {
             Column(Modifier.padding(horizontal = 22.dp)) {
                 Mensaje(
-                    "Sin eventos todavía",
+                    "Todavía no hay eventos",
                     "Aquí se registra todo lo que pasa durante el examen: quién se une, " +
                         "quién entra en alerta y quién deja de emitir."
                 )
@@ -465,4 +538,16 @@ private fun PanelBitacora(lineas: List<Bitacora.Linea>, onExportar: () -> Unit) 
             }
         }
     }
+}
+
+/** Comparte la bitacora como texto plano. No hace falta FileProvider. */
+private fun exportarBitacora(contexto: android.content.Context, sala: Int) {
+    val envio = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_SUBJECT, "Bitácora VIGÍA — aula $sala")
+        putExtra(android.content.Intent.EXTRA_TEXT, Bitacora.csv())
+    }
+    contexto.startActivity(
+        android.content.Intent.createChooser(envio, "Exportar bitácora")
+    )
 }
