@@ -51,6 +51,12 @@ object AdaptationRules {
      */
     const val SUSTAINED_MS = 1_200L
 
+    /**
+     * Tiempo maximo continuo permitido fuera de la posicion boca abajo.
+     * Superados los 3 segundos, se dispara el nuevo estado de riesgo.
+     */
+    const val BOCA_ARRIBA_GRACE_MS = 3_000L
+
     // --- Modo operativo ---
 
     /** Porcentaje de bateria que dispara el modo AHORRO. */

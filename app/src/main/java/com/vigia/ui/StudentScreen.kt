@@ -44,18 +44,21 @@ private fun indicacion(riesgo: RiskLevel): String = when (riesgo) {
     RiskLevel.NORMAL -> "Todo en orden. Deja el equipo sobre la mesa."
     RiskLevel.ATENCION -> "Se registró movimiento. Evita tocar el equipo."
     RiskLevel.ALERTA -> "Movimiento sostenido: el docente lo está viendo. Suelta el equipo."
+    RiskLevel.NO_BOCA_ABAJO -> "¡TELÉFONO VOLTEADO! Coloca el equipo boca abajo de inmediato."
 }
 
 private fun textoRiesgo(riesgo: RiskLevel): String = when (riesgo) {
     RiskLevel.NORMAL -> "Sin novedad"
     RiskLevel.ATENCION -> "Requiere atención"
     RiskLevel.ALERTA -> "Movimiento sostenido"
+    RiskLevel.NO_BOCA_ABAJO -> "Posición indebida (>3s)"
 }
 
 private fun colorRiesgo(riesgo: RiskLevel): Color = when (riesgo) {
     RiskLevel.NORMAL -> Color(0xFF2E7D32)
     RiskLevel.ATENCION -> Color(0xFFEF6C00)
     RiskLevel.ALERTA -> Color(0xFFC62828)
+    RiskLevel.NO_BOCA_ABAJO -> Color(0xFFD50000)
 }
 
 private fun textoModo(modo: OperatingMode): String = when (modo) {
@@ -150,11 +153,35 @@ fun StudentScreen(
 
         Column(Modifier.padding(horizontal = 22.dp, vertical = 16.dp)) {
 
+            // ----- Alerta visible en caso de riesgo por posición -----
+            if (decision.risk == RiskLevel.NO_BOCA_ABAJO) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text(
+                            "ALERTA: POSICIÓN INCORRECTA",
+                            color = Color(0xFFC62828),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "El equipo lleva más de 3 segundos sin estar boca abajo. Colócalo sobre la pantalla para regularizar tu estado.",
+                            color = Color(0xFFB71C1C),
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+
             // ----- Lectura principal + que debe hacer el alumno -----
             Text("QUE ESTA PASANDO", fontSize = 12.sp, color = Color(0xFF5F6368))
             Spacer(Modifier.height(6.dp))
             Text(
-                textoMovimiento(ctx.movementIndex),
+                if (decision.risk == RiskLevel.NO_BOCA_ABAJO) "Equipo no está boca abajo" else textoMovimiento(ctx.movementIndex),
                 fontSize = 23.sp, fontWeight = FontWeight.Bold,
                 color = colorRiesgo(decision.risk)
             )
@@ -196,6 +223,7 @@ fun StudentScreen(
             // ----- Contexto crudo -----
             Text("CONTEXTO DETECTADO", fontSize = 12.sp, color = Color(0xFF5F6368))
             Spacer(Modifier.height(4.dp))
+            Fila("Posición", if (ctx.estaBocaAbajo) "Boca abajo" else "Fuera de posición", if (ctx.estaBocaAbajo) Color(0xFF2E7D32) else Color(0xFFC62828))
             Fila("Indice de movimiento", "%.3f".format(ctx.movementIndex))
             Fila(
                 "Bateria",
@@ -241,7 +269,7 @@ fun PantallaBloqueada(codigo: String, onDesbloquear: (String) -> Boolean) {
         Spacer(Modifier.height(16.dp))
         Text(
             "La aplicación registró que saliste durante el examen.\n" +
-                "Lleva tu equipo al docente para continuar.",
+                    "Lleva tu equipo al docente para continuar.",
             fontSize = 15.sp, color = Paleta.SobreGuinda, textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(10.dp))

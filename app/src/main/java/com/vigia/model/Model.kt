@@ -8,10 +8,11 @@ data class ContextSnapshot(
     val wifiEnabled: Boolean = false,
     val mobileDataEnabled: Boolean = false,
     val screenOn: Boolean = true,
-    val appEnPrimerPlano: Boolean = true
+    val appEnPrimerPlano: Boolean = true,
+    val estaBocaAbajo: Boolean = true
 )
 
-enum class RiskLevel { NORMAL, ATENCION, ALERTA }
+enum class RiskLevel { NORMAL, ATENCION, ALERTA, NO_BOCA_ABAJO }
 
 enum class OperatingMode { NORMAL, INTENSIVO, AHORRO, DESCONECTADO }
 

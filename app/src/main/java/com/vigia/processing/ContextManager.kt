@@ -20,15 +20,17 @@ class ContextManager(context: Context) {
         movement,
         battery.state,
         connectivity.state,
-        screen.state
-    ) { mov, bat, net, scr ->
+        screen.state,
+        accelerometer.estaBocaAbajo
+    ) { mov, bat, net, scr, bocaAbajo ->
         ContextSnapshot(
             movementIndex = mov,
             batteryLevel = bat.level,
             batterySaver = bat.saver,
             wifiEnabled = net.wifi,
             mobileDataEnabled = net.mobile,
-            screenOn = scr
+            screenOn = scr,
+            estaBocaAbajo = bocaAbajo
         )
     }.sample(200)   // no emitir más rápido de 5 Hz
 

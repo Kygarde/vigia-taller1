@@ -23,6 +23,9 @@ class AdaptationEngine {
             ctx.batterySaver || ctx.batteryLevel < AdaptationRules.BATTERY_LOW ->
                 OperatingMode.AHORRO to "Batería ${ctx.batteryLevel}%: reduciendo frecuencia"
 
+            risk == RiskLevel.NO_BOCA_ABAJO ->
+                OperatingMode.INTENSIVO to "Teléfono no está boca abajo (>3 s): vigilancia reforzada"
+
             risk == RiskLevel.ALERTA ->
                 OperatingMode.INTENSIVO to "Movimiento sostenido: aumentando frecuencia"
 
