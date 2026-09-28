@@ -9,7 +9,8 @@ data class ContextSnapshot(
     val mobileDataEnabled: Boolean = false,
     val screenOn: Boolean = true,
     val appEnPrimerPlano: Boolean = true,
-    val estaBocaAbajo: Boolean = true
+    val estaBocaAbajo: Boolean = true,
+    val proximidadCubierta: Boolean = true // true: apoyado sobre la mesa; false: levantado
 )
 
 enum class RiskLevel { NORMAL, ATENCION, ALERTA, NO_BOCA_ABAJO }

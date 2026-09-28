@@ -19,9 +19,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // Dos aplicaciones desde el mismo codigo fuente.
-    // El alumno no puede entrar al panel del docente porque ese camino no existe
-    // en su APK. Como el applicationId es distinto, las dos conviven en un equipo.
     flavorDimensions += "rol"
 
     productFlavors {
@@ -52,8 +49,8 @@ android {
     }
     buildFeatures {
         compose = true
-        buildConfig = true      // sin esto no se genera BuildConfig.ES_DOCENTE
-        resValues = true        // sin esto los flavors no pueden definir app_name
+        buildConfig = true
+        resValues = true
     }
 }
 
@@ -67,6 +64,12 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+
+    // Room Database
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    annotationProcessor(libs.androidx.room.compiler)
+
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

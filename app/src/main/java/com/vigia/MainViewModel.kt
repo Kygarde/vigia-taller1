@@ -6,16 +6,18 @@ import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vigia.BuildConfig
+import com.vigia.actuation.HapticActuator
 import com.vigia.adaptation.SamplingPolicy
 import com.vigia.decision.AdaptationEngine
 import com.vigia.model.*
 import com.vigia.processing.ContextManager
+import com.vigia.transport.Bitacora
 import com.vigia.transport.BleAdvertiser
 import com.vigia.transport.BloqueoStore
+import com.vigia.transport.EquipoStore
 import com.vigia.transport.EstadoAnuncio
 import com.vigia.transport.PacketCodec
 import com.vigia.transport.SesionExamen
-import com.vigia.transport.EquipoStore
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +34,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val engine = AdaptationEngine()
     private val samplingPolicy = SamplingPolicy(contextManager.accelerometer)
     private val advertiser = BleAdvertiser(app)
+    private val hapticActuator = HapticActuator(app)
 
     /** Identificador estable del equipo, derivado del ANDROID_ID. No identifica a la persona. */
     val idAlumno: Int = run {
@@ -121,6 +124,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 fueraDeLaApp = true
                 _bloqueado.value = true
                 BloqueoStore.guardar(getApplication(), true)
+                hapticActuator.emitirAlertaFisica() // Acción física: avisa al alumno que incurrió en bloqueo
                 forzarEmision()
             }
         }
@@ -179,10 +183,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val estadoAnuncio = advertiser.estado
 
     /**
-     * El docente abre su panel. No anuncia estado, pero si emite la baliza del aula:
-     * es la unica forma de que los alumnos sepan que ese salon existe.
-     */
-    /**
      * Aula que ESTE equipo esta anunciando, o anuncio hace muy poco.
      *
      * Al salir del panel el anuncio se detiene, pero la baliza que ya salio sigue
@@ -215,6 +215,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         EquipoStore.guardarSala(app, sala)
         _sala.value = EquipoStore.leerSala(app)
         _pinAula.value = pin
+
+        // Inicializa la base de datos Room de la bitácora vinculada al aula
+        Bitacora.inicializar(app, sala)
+
         dejarDeAnunciar()
         advertiser.publish(PacketCodec.encodeAula(sala, PacketCodec.huellaPin(pin, sala)))
         olvidarMiAula?.cancel()
@@ -281,7 +285,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-
     private fun dejarDeAnunciar() {
         _unido.value = false
         ultimoPaquete = null
@@ -305,6 +308,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private var ultimaEmision = 0L
     private var ultimoPaquete: ByteArray? = null
+    private var ultimoRiesgoActuado: RiskLevel = RiskLevel.NORMAL
 
     init {
         // Un equipo bloqueado sigue reportandose aunque cierren y reabran la app.
@@ -321,6 +325,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _decision.value = d
                 samplingPolicy.apply(d.mode)          // ADAPTACION
                 _samplingLabel.value = samplingPolicy.currentConfig.label
+
+                // ACCION FISICA (Actuador):
+                // Si el alumno está dentro del examen e incurre en infracción física
+                // (movimiento sostenido o equipo fuera de posición boca abajo/mesa)
+                if (_unido.value &&
+                    (d.risk == RiskLevel.ALERTA || d.risk == RiskLevel.NO_BOCA_ABAJO) &&
+                    ultimoRiesgoActuado != d.risk
+                ) {
+                    hapticActuator.emitirAlertaFisica()
+                }
+                ultimoRiesgoActuado = d.risk
+
                 emitirSiCorresponde(ctx, d)           // TRANSPORTE
             }
         }

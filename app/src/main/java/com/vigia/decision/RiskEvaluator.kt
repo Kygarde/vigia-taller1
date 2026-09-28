@@ -11,8 +11,12 @@ class RiskEvaluator {
     fun evaluate(ctx: ContextSnapshot): RiskLevel {
         val now = ctx.timestamp
 
-        // Control de permanencia fuera de la posición boca abajo (tolerancia de 3 segundos)
-        if (!ctx.estaBocaAbajo) {
+        // Condición física conjunta:
+        // El equipo está en infracción de postura si el acelerómetro detecta que no está boca abajo
+        // O si el sensor de proximidad detecta que fue levantado/despejado de la superficie.
+        val fueraDePosicionFisica = !ctx.estaBocaAbajo || !ctx.proximidadCubierta
+
+        if (fueraDePosicionFisica) {
             if (notFaceDownSince == null) notFaceDownSince = now
             val tiempoFuera = now - (notFaceDownSince ?: now)
             if (tiempoFuera >= AdaptationRules.BOCA_ARRIBA_GRACE_MS) {
@@ -22,7 +26,7 @@ class RiskEvaluator {
             notFaceDownSince = null
         }
 
-        // Lógica existente de detección de movimiento
+        // Lógica de manipulación física continua (acelerómetro + pantalla activa)
         if (ctx.movementIndex > AdaptationRules.MOVEMENT_ALERTA) {
             if (aboveSince == null) aboveSince = now
             val sustained = now - (aboveSince ?: now)
