@@ -12,7 +12,8 @@ enum class Evento(val texto: String) {
     SIN_SENAL("dejó de emitir"),
     REGRESO("volvió a emitir"),
     SALIO_APP("salió de la aplicación"),
-    NO_REGISTRADO("equipo no registrado en el padrón")
+    NO_REGISTRADO("equipo no registrado en el padrón"),
+    NO_BOCA_ABAJO("teléfono volteado (>3s)")
 }
 
 object Bitacora {

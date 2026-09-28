@@ -143,12 +143,15 @@ class BleScanner(context: Context) {
                     Bitacora.registrar(status.etiqueta, Evento.REGRESO)
                 }
 
-                // Una incidencia es una ENTRADA en ALERTA, no cada anuncio en ALERTA:
-                // si no, agitar el equipo sumaria decenas de puntos por segundo.
+                // Una incidencia es una ENTRADA en estado crítico, no cada anuncio recibido:
+                // si no, la tasa de emisión sumaría decenas de puntos por segundo.
                 val antes = riesgoPrevio[status.id]
                 if (status.risk == RiskLevel.ALERTA && antes != RiskLevel.ALERTA) {
                     incidencias[status.id] = (incidencias[status.id] ?: 0) + 1
                     Bitacora.registrar(status.etiqueta, Evento.ALERTA)
+                } else if (status.risk == RiskLevel.NO_BOCA_ABAJO && antes != RiskLevel.NO_BOCA_ABAJO) {
+                    incidencias[status.id] = (incidencias[status.id] ?: 0) + 1
+                    Bitacora.registrar(status.etiqueta, Evento.NO_BOCA_ABAJO)
                 }
                 riesgoPrevio[status.id] = status.risk
 

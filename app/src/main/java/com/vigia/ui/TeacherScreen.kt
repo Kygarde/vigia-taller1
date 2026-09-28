@@ -47,6 +47,7 @@ import com.vigia.transport.SesionExamen
 private fun colorRiesgo(riesgo: RiskLevel, enPadron: Boolean, ausente: Boolean): Color = when {
     !enPadron -> Paleta.PlomoClaro
     ausente -> Paleta.Plomo
+    riesgo == RiskLevel.NO_BOCA_ABAJO -> Paleta.Intensivo
     riesgo == RiskLevel.ALERTA -> Paleta.Intensivo
     riesgo == RiskLevel.ATENCION -> Paleta.Ahorro
     else -> Paleta.Normal
@@ -55,6 +56,7 @@ private fun colorRiesgo(riesgo: RiskLevel, enPadron: Boolean, ausente: Boolean):
 private fun textoRiesgo(riesgo: RiskLevel, enPadron: Boolean, ausente: Boolean): String = when {
     !enPadron -> "No estaba al pasar lista"
     ausente -> "Sin señal"
+    riesgo == RiskLevel.NO_BOCA_ABAJO -> "Teléfono no está boca abajo (>3s)"
     riesgo == RiskLevel.ALERTA -> "Está usando el equipo"
     riesgo == RiskLevel.ATENCION -> "Se movió"
     else -> "Sin novedad"
@@ -129,6 +131,7 @@ private fun FilaAlumno(a: AlumnoVigilado) {
             Text(
                 buildString {
                     append("movimiento %.2f  ·  batería %d%%".format(e.movement, e.battery))
+                    if (e.noBocaAbajo) append("  ·  VOLTEADO")
                     if (!e.screenOn) append("  ·  pantalla apagada")
                     if (e.salioDeLaApp) append("  ·  FUERA APP")
                     a.ausenteDesde?.let { t ->
@@ -159,6 +162,7 @@ fun TeacherScreen(
     onFinalizar: () -> Unit
 ) {
     val enAlerta = alumnos.count { it.estado.risk == RiskLevel.ALERTA }
+    val noBocaAbajoCount = alumnos.count { it.estado.risk == RiskLevel.NO_BOCA_ABAJO }
     val totalIncidencias = alumnos.sumOf { it.incidencias }
     // Ojo: un panel duplicado de MI PROPIA aula no se puede detectar, porque
     // aulasAbiertas() devuelve codigos de aula y mi propia baliza tambien esta ahi.
@@ -183,7 +187,7 @@ fun TeacherScreen(
                     Spacer(Modifier.height(10.dp))
                     Text(
                         "Al finalizar se deja de anunciar el aula y se borra la sesión. " +
-                            "Los alumnos saldrán solos cuando dejen de ver la baliza.",
+                                "Los alumnos saldrán solos cuando dejen de ver la baliza.",
                         fontSize = 13.sp, color = Paleta.Plomo
                     )
                     Spacer(Modifier.height(14.dp))
@@ -265,10 +269,10 @@ fun TeacherScreen(
                     color = if (totalIncidencias > 0) Color(0xFFFFCDD2) else Paleta.SobreGuinda
                 )
                 Text("incidencias registradas", fontSize = 14.sp, color = Paleta.SobreGuinda)
-                if (enAlerta > 0) {
+                if (enAlerta > 0 || noBocaAbajoCount > 0) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "$enAlerta usando el equipo ahora",
+                        "${enAlerta + noBocaAbajoCount} en infracción ahora",
                         fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFCDD2)
                     )
                 }
@@ -299,8 +303,8 @@ fun TeacherScreen(
                 Mensaje(
                     "Hay otro examen cerca",
                     "Se detectaron otros paneles activos: " +
-                        otrasAulas.sorted().joinToString(", ") { "aula $it" } + ". " +
-                        "Verifica que tu código sea el $sala antes de continuar.",
+                            otrasAulas.sorted().joinToString(", ") { "aula $it" } + ". " +
+                            "Verifica que tu código sea el $sala antes de continuar.",
                     accion = null, onAccion = null
                 )
                 Spacer(Modifier.height(12.dp))
@@ -437,11 +441,11 @@ private fun BarraPadron(alumnos: List<AlumnoVigilado>) {
                 Text(
                     when {
                         faltan > 0 -> "⚠ $faltan sin explicar: están en el salón, " +
-                            "no tienen el celular apagado y no aparecen en la lista"
+                                "no tienen el celular apagado y no aparecen en la lista"
                         faltan < 0 -> "Hay más equipos conectados que personas contadas. " +
-                            "Revisa el conteo o el código de aula."
+                                "Revisa el conteo o el código de aula."
                         else -> "Todo cuadra: $p personas = $conectados conectados + " +
-                            "${sinEquipo.toIntOrNull() ?: 0} sin celular"
+                                "${sinEquipo.toIntOrNull() ?: 0} sin celular"
                     },
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -484,7 +488,7 @@ private fun BarraPadron(alumnos: List<AlumnoVigilado>) {
                         )
                     }
                     val faltan = PadronStore.presentes - PadronStore.tamano -
-                        PadronStore.sinEquipo
+                            PadronStore.sinEquipo
                     if (faltan > 0) {
                         Text("⚠ $faltan personas sin explicar",
                             fontSize = 12.sp, color = Paleta.Intensivo)
@@ -516,7 +520,7 @@ private fun PanelBitacora(lineas: List<Bitacora.Linea>, onExportar: () -> Unit) 
                 Mensaje(
                     "Todavía no hay eventos",
                     "Aquí se registra todo lo que pasa durante el examen: quién se une, " +
-                        "quién entra en alerta y quién deja de emitir."
+                            "quién entra en alerta y quién deja de emitir."
                 )
             }
         } else {

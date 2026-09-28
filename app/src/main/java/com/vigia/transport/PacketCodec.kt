@@ -20,7 +20,7 @@ import com.vigia.model.*
  *   [6]      indice de movimiento (0..255)
  *   [7]      bateria (%)
  *   [8]      modo de operacion
- *   [9]      banderas: wifi, datos, pantalla, salio de la app, bloqueado
+ *   [9]      banderas: wifi, datos, pantalla, salio de la app, bloqueado, no boca abajo
  *   [10]     largo del codigo en bytes
  *   [11..]   codigo de alumno en UTF-8
  *
@@ -39,11 +39,12 @@ object PacketCodec {
     private const val CABECERA_ALUMNO = 11
 
     // Banderas del byte [9]
-    private const val F_WIFI     = 0b00001
-    private const val F_DATOS    = 0b00010
-    private const val F_PANTALLA = 0b00100
-    private const val F_SALIO    = 0b01000   // NUEVO
-    private const val F_BLOQUEO  = 0b10000   // NUEVO
+    private const val F_WIFI          = 0b000001
+    private const val F_DATOS         = 0b000010
+    private const val F_PANTALLA      = 0b000100
+    private const val F_SALIO         = 0b001000
+    private const val F_BLOQUEO       = 0b010000
+    private const val F_NO_BOCA_ABAJO = 0b100000
 
     /**
      * Baliza del docente: "el aula N esta abierta, y su PIN tiene esta huella".
@@ -93,7 +94,7 @@ object PacketCodec {
         codigo: String,
         ctx: ContextSnapshot,
         d: AdaptationDecision,
-        bloqueado: Boolean = false           // NUEVO, con defecto para no romper nada
+        bloqueado: Boolean = false
     ): ByteArray {
         var flags = 0
         if (ctx.wifiEnabled) flags = flags or F_WIFI
@@ -101,6 +102,7 @@ object PacketCodec {
         if (ctx.screenOn) flags = flags or F_PANTALLA
         if (!ctx.appEnPrimerPlano) flags = flags or F_SALIO
         if (bloqueado) flags = flags or F_BLOQUEO
+        if (!ctx.estaBocaAbajo) flags = flags or F_NO_BOCA_ABAJO
 
         val bytesCodigo = EquipoStore.recortar(codigo).toByteArray(Charsets.UTF_8)
 
@@ -109,10 +111,10 @@ object PacketCodec {
             TIPO_ALUMNO,
             sala.toByte(),
             (id shr 8).toByte(), id.toByte(),
-            d.risk.ordinal.toByte(),
+            (d.risk.ordinal and 0xFF).toByte(),
             (ctx.movementIndex * 255).toInt().toByte(),
             ctx.batteryLevel.toByte(),
-            d.mode.ordinal.toByte(),
+            (d.mode.ordinal and 0xFF).toByte(),
             flags.toByte(),
             bytesCodigo.size.toByte()
         )
@@ -131,12 +133,15 @@ object PacketCodec {
         if (b.size < CABECERA_ALUMNO) return null
         if (b[0] != VERSION || b[1] != TIPO_ALUMNO) return null
 
-        val riesgo = RiskLevel.entries.getOrNull(b[5].toInt()) ?: return null
-        val modo = OperatingMode.entries.getOrNull(b[8].toInt()) ?: return null
+        val riesgoOrdinal = b[5].toInt() and 0xFF
+        val modoOrdinal = b[8].toInt() and 0xFF
+
+        val riesgo = RiskLevel.entries.getOrNull(riesgoOrdinal) ?: return null
+        val modo = OperatingMode.entries.getOrNull(modoOrdinal) ?: return null
 
         val largo = (b[10].toInt() and 0xFF).coerceAtMost(b.size - CABECERA_ALUMNO)
         val codigo = if (largo > 0) String(b, CABECERA_ALUMNO, largo, Charsets.UTF_8) else ""
-        val flags = b[9].toInt()
+        val flags = b[9].toInt() and 0xFF
 
         return StudentStatus(
             id = ((b[3].toInt() and 0xFF) shl 8) or (b[4].toInt() and 0xFF),
@@ -150,7 +155,8 @@ object PacketCodec {
             mobile = (flags and F_DATOS) != 0,
             screenOn = (flags and F_PANTALLA) != 0,
             salioDeLaApp = (flags and F_SALIO) != 0,
-            bloqueado = (flags and F_BLOQUEO) != 0
+            bloqueado = (flags and F_BLOQUEO) != 0,
+            noBocaAbajo = (flags and F_NO_BOCA_ABAJO) != 0
         )
     }
 }
@@ -160,8 +166,9 @@ data class StudentStatus(
     val risk: RiskLevel, val movement: Float,
     val battery: Int, val mode: OperatingMode,
     val wifi: Boolean, val mobile: Boolean, val screenOn: Boolean,
-    val salioDeLaApp: Boolean = false,        // lo usa Ernesto
-    val bloqueado: Boolean = false,           // lo usa Ernesto
+    val salioDeLaApp: Boolean = false,
+    val bloqueado: Boolean = false,
+    val noBocaAbajo: Boolean = false,
     val lastSeen: Long = System.currentTimeMillis()
 ) {
     val etiqueta: String get() = if (codigo.isNotBlank()) codigo else "Equipo $id"
@@ -178,8 +185,8 @@ data class StudentStatus(
 data class AlumnoVigilado(
     val estado: StudentStatus,
     val incidencias: Int,
-    val ausenteDesde: Long? = null,           // NUEVO
-    val enPadron: Boolean = true              // NUEVO
+    val ausenteDesde: Long? = null,
+    val enPadron: Boolean = true
 ) {
     val ausente: Boolean get() = ausenteDesde != null
 }
