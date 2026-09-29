@@ -21,21 +21,23 @@ class ContextManager(context: Context) {
     private val proximityState: Flow<Boolean> = proximity.cerca
         .onStart { emit(true) }
 
+    // Fusión física: acelerómetro en Z + sensor de proximidad
+    private data class PosicionFisica(val bocaAbajo: Boolean, val cubierta: Boolean)
+    private val posicionFisica: Flow<PosicionFisica> = combine(
+        accelerometer.estaBocaAbajo,
+        proximityState
+    ) { bocaAbajo, cubierta ->
+        PosicionFisica(bocaAbajo, cubierta)
+    }
+
+    // Combinación de 5 flujos tipados (máximo estándar y seguro de Coroutines)
     val snapshots: Flow<ContextSnapshot> = combine(
         movement,
         battery.state,
         connectivity.state,
         screen.state,
-        accelerometer.estaBocaAbajo,
-        proximityState
-    ) { args: Array<Any> ->
-        val mov = args[0] as Float
-        val bat = args[1] as BatteryState
-        val net = args[2] as ConnectivityState
-        val scr = args[3] as Boolean
-        val bocaAbajo = args[4] as Boolean
-        val cubierta = args[5] as Boolean
-
+        posicionFisica
+    ) { mov, bat, net, scr, pos ->
         ContextSnapshot(
             movementIndex = mov,
             batteryLevel = bat.level,
@@ -43,8 +45,8 @@ class ContextManager(context: Context) {
             wifiEnabled = net.wifi,
             mobileDataEnabled = net.mobile,
             screenOn = scr,
-            estaBocaAbajo = bocaAbajo,
-            proximidadCubierta = cubierta
+            estaBocaAbajo = pos.bocaAbajo,
+            proximidadCubierta = pos.cubierta
         )
     }.sample(200)   // no emitir más rápido de 5 Hz
 

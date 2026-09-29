@@ -1,8 +1,7 @@
 package com.vigia.transport
 
 import android.content.Context
-import com.vigia.data.EventoEntity
-import com.vigia.data.VigiaDatabase
+import com.vigia.data.BitacoraDbHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,41 +30,32 @@ object Bitacora {
 
     private val formato = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     private val scope = CoroutineScope(Dispatchers.IO)
-    private var appContext: Context? = null
+    private var dbHelper: BitacoraDbHelper? = null
     private var salaActual: Int = 0
 
-    /** Configura el contexto de la aplicación y el aula activa para Room. */
+    /** Configura el aula y la base de datos SQLite */
     fun inicializar(context: Context, sala: Int) {
-        appContext = context.applicationContext
         salaActual = sala
+        dbHelper = BitacoraDbHelper.getInstance(context)
     }
 
     fun registrar(codigo: String, evento: Evento) {
         val ahora = System.currentTimeMillis()
         _lineas.value = _lineas.value + Linea(ahora, codigo, evento)
 
-        // Persistencia asíncrona en Room Database
-        appContext?.let { ctx ->
+        // Persiste asíncronamente en la Base de Datos SQLite
+        dbHelper?.let { helper ->
             scope.launch {
-                val dao = VigiaDatabase.getDatabase(ctx).bitacoraDao()
-                dao.insertar(
-                    EventoEntity(
-                        sala = salaActual,
-                        codigoAlumno = codigo,
-                        tipoEvento = evento.name,
-                        descripcion = evento.texto,
-                        timestamp = ahora
-                    )
-                )
+                helper.insertarEvento(salaActual, codigo, evento.name, ahora)
             }
         }
     }
 
     fun limpiar() {
         _lineas.value = emptyList()
-        appContext?.let { ctx ->
+        dbHelper?.let { helper ->
             scope.launch {
-                VigiaDatabase.getDatabase(ctx).bitacoraDao().limpiarSala(salaActual)
+                helper.limpiarSala(salaActual)
             }
         }
     }

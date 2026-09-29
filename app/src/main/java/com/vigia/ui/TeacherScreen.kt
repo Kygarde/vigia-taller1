@@ -502,16 +502,31 @@ private fun BarraPadron(alumnos: List<AlumnoVigilado>) {
     }
 }
 
-/** El registro del examen, con boton para llevarselo. */
+/** El registro del examen con persistencia en base de datos SQLite y exportación CSV. */
 @Composable
 private fun PanelBitacora(lineas: List<Bitacora.Linea>, onExportar: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.End
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Paleta.Normal)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "SQLite Activo",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Paleta.Normal
+                )
+            }
             TextButton(onClick = onExportar, enabled = lineas.isNotEmpty()) {
-                Text("Exportar", color = Paleta.Guinda, fontSize = 13.sp)
+                Text("Exportar CSV", color = Paleta.Guinda, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -519,8 +534,8 @@ private fun PanelBitacora(lineas: List<Bitacora.Linea>, onExportar: () -> Unit) 
             Column(Modifier.padding(horizontal = 22.dp)) {
                 Mensaje(
                     "Todavía no hay eventos",
-                    "Aquí se registra todo lo que pasa durante el examen: quién se une, " +
-                            "quién entra en alerta y quién deja de emitir."
+                    "Aquí se registra todo lo que pasa durante el examen en la base de datos local: " +
+                            "quién se une, quién entra en alerta, quién levanta el equipo y quién deja de emitir."
                 )
             }
         } else {
@@ -544,14 +559,14 @@ private fun PanelBitacora(lineas: List<Bitacora.Linea>, onExportar: () -> Unit) 
     }
 }
 
-/** Comparte la bitacora como texto plano. No hace falta FileProvider. */
+/** Comparte la bitacora respaldada en base de datos como archivo de texto plano CSV. */
 private fun exportarBitacora(contexto: android.content.Context, sala: Int) {
     val envio = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
         type = "text/plain"
-        putExtra(android.content.Intent.EXTRA_SUBJECT, "Bitácora VIGÍA — aula $sala")
+        putExtra(android.content.Intent.EXTRA_SUBJECT, "Bitácora VIGÍA SQLite — aula $sala")
         putExtra(android.content.Intent.EXTRA_TEXT, Bitacora.csv())
     }
     contexto.startActivity(
-        android.content.Intent.createChooser(envio, "Exportar bitácora")
+        android.content.Intent.createChooser(envio, "Exportar bitácora SQLite")
     )
 }

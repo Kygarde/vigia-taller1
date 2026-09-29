@@ -22,21 +22,21 @@ class ProximityProvider(context: Context) {
     private val listener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
             val distancia = event.values[0]
-            // Si la distancia es menor al rango máximo, está cubierto contra la mesa
             _cerca.tryEmit(distancia < maxRange)
         }
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        override fun onAccuracyChanged(s: Sensor?, accuracy: Int) {}
     }
 
     fun start() {
-        if (running || sensor == null) return
-        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+        val s = sensor ?: return
+        if (running) return
+        sensorManager?.registerListener(listener, s, SensorManager.SENSOR_DELAY_NORMAL)
         running = true
     }
 
     fun stop() {
         if (!running) return
-        sensorManager.unregisterListener(listener)
+        sensorManager?.unregisterListener(listener)
         running = false
     }
 }

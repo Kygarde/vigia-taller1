@@ -224,6 +224,14 @@ fun StudentScreen(
             Text("CONTEXTO DETECTADO", fontSize = 12.sp, color = Color(0xFF5F6368))
             Spacer(Modifier.height(4.dp))
             Fila("Posición", if (ctx.estaBocaAbajo) "Boca abajo" else "Fuera de posición", if (ctx.estaBocaAbajo) Color(0xFF2E7D32) else Color(0xFFC62828))
+
+            // NUEVO: Segunda entrada física visible en pantalla
+            Fila(
+                "Sensor Proximidad",
+                if (ctx.proximidadCubierta) "Cubierto / En mesa" else "¡LEVANTADO / DESPEJADO!",
+                if (ctx.proximidadCubierta) Color(0xFF2E7D32) else Color(0xFFC62828)
+            )
+
             Fila("Indice de movimiento", "%.3f".format(ctx.movementIndex))
             Fila(
                 "Bateria",

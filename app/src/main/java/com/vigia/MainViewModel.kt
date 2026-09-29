@@ -124,7 +124,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 fueraDeLaApp = true
                 _bloqueado.value = true
                 BloqueoStore.guardar(getApplication(), true)
-                hapticActuator.emitirAlertaFisica() // Acción física: avisa al alumno que incurrió en bloqueo
+                hapticActuator.iniciarAlertaSostenida() // Acción física: avisa al alumno que incurrió en bloqueo
                 forzarEmision()
             }
         }
@@ -137,6 +137,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (PacketCodec.huellaPin(pin, _sala.value) != esperada) return false
         _bloqueado.value = false
         fueraDeLaApp = false
+        hapticActuator.detenerAlerta() // Detiene la alerta física al desbloquear
         BloqueoStore.guardar(getApplication(), false)
         // Si seguia dentro del examen, vuelve a su pantalla, no al inicio.
         if (_unido.value) _pantalla.value = Pantalla.ALUMNO
@@ -216,7 +217,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _sala.value = EquipoStore.leerSala(app)
         _pinAula.value = pin
 
-        // Inicializa la base de datos Room de la bitácora vinculada al aula
+        // Inicializa la base de datos SQLite de la bitácora vinculada al aula
         Bitacora.inicializar(app, sala)
 
         dejarDeAnunciar()
@@ -308,7 +309,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private var ultimaEmision = 0L
     private var ultimoPaquete: ByteArray? = null
-    private var ultimoRiesgoActuado: RiskLevel = RiskLevel.NORMAL
 
     init {
         // Un equipo bloqueado sigue reportandose aunque cierren y reabran la app.
@@ -330,12 +330,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // Si el alumno está dentro del examen e incurre en infracción física
                 // (movimiento sostenido o equipo fuera de posición boca abajo/mesa)
                 if (_unido.value &&
-                    (d.risk == RiskLevel.ALERTA || d.risk == RiskLevel.NO_BOCA_ABAJO) &&
-                    ultimoRiesgoActuado != d.risk
-                ) {
-                    hapticActuator.emitirAlertaFisica()
+                    (d.risk == RiskLevel.ALERTA || d.risk == RiskLevel.NO_BOCA_ABAJO)) {
+                    hapticActuator.iniciarAlertaSostenida()
+                } else {
+                    hapticActuator.detenerAlerta()
                 }
-                ultimoRiesgoActuado = d.risk
 
                 emitirSiCorresponde(ctx, d)           // TRANSPORTE
             }
@@ -376,6 +375,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         contextManager.stop()
+        hapticActuator.detenerAlerta()
         runCatching { advertiser.stop() }
     }
 }
